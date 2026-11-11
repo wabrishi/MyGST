@@ -21,7 +21,7 @@ export default async function AdminBackupsPage({ searchParams }: PageProps<"/adm
     },
   });
   const cronSet = !!process.env.CRON_SECRET;
-  const internal = process.env.BACKUP_INTERNAL_SCHEDULER !== "false";
+  const internal = process.env.BACKUP_INTERNAL_SCHEDULER === "true";
 
   return (
     <div className="flex max-w-4xl flex-col gap-4">
@@ -42,8 +42,8 @@ export default async function AdminBackupsPage({ searchParams }: PageProps<"/adm
         <h2 className="mb-2 font-semibold">Schedule</h2>
         <ul className="flex flex-col gap-1.5">
           <li>
-            Built-in scheduler: {internal ? <Badge color="green">On</Badge> : <Badge>Off</Badge>} — checks every 15 minutes while the app is running and backs
-            up anything not backed up in the last 11 hours.
+            Built-in scheduler: {internal ? <Badge color="green">On</Badge> : <Badge>Off</Badge>} — optional (BACKUP_INTERNAL_SCHEDULER=&quot;true&quot;); checks
+            every 15 minutes while the app runs. Leave it off on Hostinger and use the cron job below.
           </li>
           <li>
             Cron endpoint: {cronSet ? <Badge color="green">CRON_SECRET set</Badge> : <Badge color="amber">CRON_SECRET not set</Badge>} — recommended on

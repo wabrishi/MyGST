@@ -107,7 +107,7 @@ Notes:
 
 **Scheduling**
 
-- **Built-in scheduler:** `src/instrumentation.ts` checks every 15 minutes while the app is running.
+- **Built-in scheduler (optional, off by default):** set `BACKUP_INTERNAL_SCHEDULER="true"` to have `src/instrumentation.ts` check every 15 minutes. Use it for a VPS or local runs. Leave it off on Hostinger, where background timers stop on restarts.
 - **Hostinger Cron Job (recommended),** in case the app sleeps when idle: in hPanel → Advanced → Cron Jobs, add twice daily:
   ```
   0 2,14 * * *  curl -fsS -H "Authorization: Bearer YOUR_CRON_SECRET" https://your-domain.com/api/cron/backup
