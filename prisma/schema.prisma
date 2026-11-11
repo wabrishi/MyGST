@@ -1,0 +1,510 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// ───────────────────────── Auth (Better Auth core tables) ─────────────────────────
+
+model User {
+  id            String   @id
+  name          String
+  email         String   @unique
+  emailVerified Boolean  @default(false)
+  image         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions    Session[]
+  accounts    Account[]
+  memberships Membership[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?  @db.Text
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  idToken               String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ───────────────────────── Tenancy ─────────────────────────
+
+enum Role {
+  OWNER
+  ACCOUNTANT
+  STAFF
+}
+
+model Company {
+  id               String   @id @default(cuid())
+  legalName        String
+  tradeName        String   @default("")
+  gstin            String   @default("")
+  address          String   @default("") @db.VarChar(500)
+  city             String   @default("")
+  pincode          String   @default("")
+  stateCode        String   @db.Char(2)
+  phone            String   @default("")
+  email            String   @default("")
+  logo             Bytes?   @db.MediumBlob
+  logoMime         String?
+  bankName         String   @default("")
+  bankAccount      String   @default("")
+  bankIfsc         String   @default("")
+  bankBranch       String   @default("")
+  upiId            String   @default("")
+  terms            String?   @db.Text
+  pricesIncludeTax Boolean  @default(false)
+  /// Books are locked (closed financial years) up to and including this date.
+  lockedUntil      DateTime? @db.Date
+  /// Set when the owner finishes the setup wizard.
+  setupCompletedAt DateTime?
+  /// Suspended by a platform super-admin: members can't open the company.
+  suspendedAt      DateTime?
+  /// "SIGNUP" (self-service) or "ADMIN" (created from the super-admin panel).
+  createdVia       String    @default("SIGNUP")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  memberships  Membership[]
+  invitations  Invitation[]
+  parties      Party[]
+  products     Product[]
+  numberSeries NumberSeries[]
+  documents    Document[]
+  purchases    PurchaseBill[]
+  payments     Payment[]
+  auditLogs    AuditLog[]
+  backupTargets BackupTarget[]
+
+  @@map("company")
+}
+
+/// Business rule: a user belongs to exactly ONE company (any role) — enforced by the unique userId.
+model Membership {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  companyId String
+  role      Role
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@index([companyId])
+  @@map("membership")
+}
+
+model Invitation {
+  id         String    @id @default(cuid())
+  companyId  String
+  email      String
+  role       Role
+  tokenHash  String    @unique
+  invitedBy  String
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("invitation")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  data      Json?
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@map("audit_log")
+}
+
+// ───────────────────────── Masters ─────────────────────────
+
+enum PartyType {
+  CUSTOMER
+  SUPPLIER
+  BOTH
+}
+
+model Party {
+  id              String    @id @default(cuid())
+  companyId       String
+  type            PartyType @default(CUSTOMER)
+  name            String
+  gstin           String    @default("")
+  phone           String    @default("")
+  email           String    @default("")
+  billingAddress  String    @default("") @db.VarChar(500)
+  shippingAddress String    @default("") @db.VarChar(500)
+  stateCode       String    @db.Char(2)
+  shippingState   String?   @db.Char(2)
+  openingBalance  Decimal   @default(0) @db.Decimal(14, 2) // +ve = they owe us, -ve = we owe them
+  creditDays      Int       @default(0)
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  documents Document[]
+  purchases PurchaseBill[]
+  payments  Payment[]
+
+  @@index([companyId, name])
+  @@map("party")
+}
+
+model Product {
+  id            String   @id @default(cuid())
+  companyId     String
+  name          String
+  hsnSac        String   @default("")
+  isService     Boolean  @default(false)
+  unit          String   @default("NOS")
+  salePrice     Decimal  @default(0) @db.Decimal(14, 2)
+  purchasePrice Decimal  @default(0) @db.Decimal(14, 2)
+  gstRate       Decimal  @default(18) @db.Decimal(5, 2)
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, name])
+  @@map("product")
+}
+
+enum DocType {
+  INVOICE
+  QUOTATION
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+model NumberSeries {
+  id        String  @id @default(cuid())
+  companyId String
+  docType   DocType
+  fy        String  @db.VarChar(5) // "26-27"
+  prefix    String  @db.VarChar(6)
+  nextSeq   Int     @default(1)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, docType, fy])
+  @@map("number_series")
+}
+
+// ───────────────────────── Sales documents ─────────────────────────
+
+enum DocStatus {
+  ISSUED
+  CANCELLED
+  OPEN // quotation
+  ACCEPTED // quotation
+  CONVERTED // quotation -> invoice
+  EXPIRED // quotation
+}
+
+model Document {
+  id               String    @id @default(cuid())
+  companyId        String
+  type             DocType
+  number           String    @db.VarChar(16)
+  fy               String    @db.VarChar(5)
+  seq              Int
+  date             DateTime  @db.Date
+  dueDate          DateTime? @db.Date
+  status           DocStatus
+  partyId          String
+  partyName        String
+  partyGstin       String    @default("")
+  partyAddress     String    @default("") @db.VarChar(500)
+  partyState       String    @db.Char(2)
+  shippingAddress  String    @default("") @db.VarChar(500)
+  seller           Json
+  placeOfSupply    String    @db.Char(2)
+  isInterstate     Boolean
+  reverseCharge    Boolean   @default(false)
+  pricesIncludeTax Boolean   @default(false)
+  taxableTotal     Decimal   @db.Decimal(14, 2)
+  cgst             Decimal   @db.Decimal(14, 2)
+  sgst             Decimal   @db.Decimal(14, 2)
+  igst             Decimal   @db.Decimal(14, 2)
+  roundOff         Decimal   @db.Decimal(6, 2)
+  grandTotal       Decimal   @db.Decimal(14, 2)
+  originalDocId    String? // credit/debit note -> invoice
+  convertedToId    String? // quotation -> invoice
+  noteReason       String    @default("")
+  notes            String?    @db.Text
+  createdById      String
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party       Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  originalDoc Document?            @relation("NoteOf", fields: [originalDocId], references: [id], onDelete: Restrict)
+  notesOnThis Document[]           @relation("NoteOf")
+  items       DocumentItem[]
+  allocations PaymentAllocation[]
+
+  @@unique([companyId, type, fy, seq])
+  @@unique([companyId, type, number])
+  @@index([companyId, type, date])
+  @@index([partyId])
+  @@map("document")
+}
+
+model DocumentItem {
+  id          String   @id @default(cuid())
+  documentId  String
+  position    Int
+  productId   String?
+  description String
+  hsnSac      String   @default("")
+  unit        String   @default("NOS")
+  qty         Decimal  @db.Decimal(14, 3)
+  rate        Decimal  @db.Decimal(14, 4)
+  discountPct Decimal  @default(0) @db.Decimal(5, 2)
+  gstRate     Decimal  @db.Decimal(5, 2)
+  taxable     Decimal  @db.Decimal(14, 2)
+  cgst        Decimal  @db.Decimal(14, 2)
+  sgst        Decimal  @db.Decimal(14, 2)
+  igst        Decimal  @db.Decimal(14, 2)
+  total       Decimal  @db.Decimal(14, 2)
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("document_item")
+}
+
+// ───────────────────────── Purchases ─────────────────────────
+
+enum ItcType {
+  ELIGIBLE
+  INELIGIBLE
+  CAPITAL_GOODS
+}
+
+model PurchaseBill {
+  id            String    @id @default(cuid())
+  companyId     String
+  billNumber    String
+  billDate      DateTime  @db.Date
+  dueDate       DateTime? @db.Date
+  partyId       String
+  partyName     String
+  partyGstin    String    @default("")
+  partyState    String    @db.Char(2)
+  placeOfSupply String    @db.Char(2)
+  isInterstate  Boolean
+  reverseCharge Boolean   @default(false)
+  itcType       ItcType   @default(ELIGIBLE)
+  pricesIncludeTax Boolean @default(false)
+  taxableTotal  Decimal   @db.Decimal(14, 2)
+  cgst          Decimal   @db.Decimal(14, 2)
+  sgst          Decimal   @db.Decimal(14, 2)
+  igst          Decimal   @db.Decimal(14, 2)
+  roundOff      Decimal   @db.Decimal(6, 2)
+  grandTotal    Decimal   @db.Decimal(14, 2)
+  notes         String?    @db.Text
+  cancelled     Boolean   @default(false)
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party       Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  items       PurchaseItem[]
+  allocations PaymentAllocation[]
+
+  @@unique([companyId, partyId, billNumber])
+  @@index([companyId, billDate])
+  @@map("purchase_bill")
+}
+
+model PurchaseItem {
+  id          String       @id @default(cuid())
+  billId      String
+  position    Int
+  productId   String?
+  description String
+  hsnSac      String       @default("")
+  unit        String       @default("NOS")
+  qty         Decimal      @db.Decimal(14, 3)
+  rate        Decimal      @db.Decimal(14, 4)
+  discountPct Decimal      @default(0) @db.Decimal(5, 2)
+  gstRate     Decimal      @db.Decimal(5, 2)
+  taxable     Decimal      @db.Decimal(14, 2)
+  cgst        Decimal      @db.Decimal(14, 2)
+  sgst        Decimal      @db.Decimal(14, 2)
+  igst        Decimal      @db.Decimal(14, 2)
+  total       Decimal      @db.Decimal(14, 2)
+  bill        PurchaseBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@index([billId])
+  @@map("purchase_item")
+}
+
+// ───────────────────────── Payments ─────────────────────────
+
+enum PaymentDirection {
+  RECEIVED
+  PAID
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  BANK
+  CHEQUE
+  CARD
+  OTHER
+}
+
+model Payment {
+  id          String           @id @default(cuid())
+  companyId   String
+  partyId     String
+  direction   PaymentDirection
+  date        DateTime         @db.Date
+  amount      Decimal          @db.Decimal(14, 2)
+  mode        PaymentMode      @default(BANK)
+  reference   String           @default("")
+  notes       String?           @db.Text
+  createdById String
+  createdAt   DateTime         @default(now())
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party       Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  allocations PaymentAllocation[]
+
+  @@index([companyId, date])
+  @@index([partyId])
+  @@map("payment")
+}
+
+model PaymentAllocation {
+  id             String        @id @default(cuid())
+  paymentId      String
+  documentId     String?
+  purchaseBillId String?
+  amount         Decimal       @db.Decimal(14, 2)
+  payment        Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  document       Document?     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  purchaseBill   PurchaseBill? @relation(fields: [purchaseBillId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@index([documentId])
+  @@index([purchaseBillId])
+  @@map("payment_allocation")
+}
+
+// ───────────────────────── Backups ─────────────────────────
+
+enum BackupScope {
+  PLATFORM // whole database, controlled by a super-admin
+  COMPANY // one company's data, controlled by its owner
+}
+
+enum BackupStatus {
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+/// A connected backup destination (currently Google Drive).
+model BackupTarget {
+  id              String      @id @default(cuid())
+  /// "platform" or "company:<companyId>" — one target per scope.
+  scopeKey        String      @unique
+  scope           BackupScope
+  companyId       String?
+  provider        String      @default("GOOGLE_DRIVE")
+  accountEmail    String
+  /// OAuth refresh token, AES-256-GCM encrypted (see lib/backup/crypto.ts).
+  refreshTokenEnc String      @db.Text
+  folderId        String
+  enabled         Boolean     @default(true)
+  retentionDays   Int         @default(30)
+  connectedById   String
+  /// Set while a run is in progress (prevents overlapping runs).
+  runningSince    DateTime?
+  lastSuccessAt   DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  company         Company?    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  runs            BackupRun[]
+
+  @@index([companyId])
+  @@map("backup_target")
+}
+
+model BackupRun {
+  id         String       @id @default(cuid())
+  targetId   String
+  trigger    String // SCHEDULED | MANUAL
+  status     BackupStatus
+  startedAt  DateTime     @default(now())
+  finishedAt DateTime?
+  fileName   String?
+  fileId     String?
+  sizeBytes  Int?
+  deleted    Int          @default(0) // old files removed by retention in this run
+  error      String?      @db.Text
+  target     BackupTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@index([targetId, startedAt])
+  @@map("backup_run")
+}

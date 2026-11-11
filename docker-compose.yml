@@ -1,0 +1,18 @@
+# Local development database only. Production uses Hostinger's MySQL.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mygst-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mygst
+      MYSQL_USER: mygst
+      MYSQL_PASSWORD: mygst
+    ports:
+      - "3307:3306"
+    volumes:
+      - mygst-mysql:/var/lib/mysql
+
+volumes:
+  mygst-mysql:

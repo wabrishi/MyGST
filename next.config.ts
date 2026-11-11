@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  cacheComponents: true,
-  partialPrefetching: true,
+  // Everything in this app is per-user and dynamic, so Cache Components is intentionally off.
+  serverExternalPackages: ["@react-pdf/renderer", "mariadb"],
+  experimental: {
+    serverActions: { bodySizeLimit: "2mb" }, // logo upload
+  },
   turbopack: {
     rules: {
       "*.css": {
