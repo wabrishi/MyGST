@@ -6,14 +6,9 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "2mb" }, // logo upload
   },
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
+  // Tailwind runs through PostCSS (postcss.config.mjs). Production builds use webpack (`next build --webpack`)
+  // because Turbopack spawns separate Node worker processes for CSS loaders, which shared-hosting build
+  // servers (Hostinger) can kill. Dev still uses Turbopack.
 };
 
 export default nextConfig;

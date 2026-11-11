@@ -4,9 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
-    "start": "next start",
-    "deploy:build": "prisma generate && prisma migrate deploy && next build",
+    "build": "prisma generate && next build --webpack",
+    "start": "prisma migrate deploy && next start",
+    "deploy:build": "prisma generate && prisma migrate deploy && next build --webpack",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "start:app": "next start"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.10.1",
@@ -36,18 +37,19 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.65.0",
-    "@tailwindcss/turbopack": "4.3.3",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^24.19.2",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "postcss": "^8.5.32",
     "tailwindcss": "4.3.3",
     "typescript": "^5",
     "vitest": "^5.1.0"
   },
   "engines": {
-    "node": ">=20.9.0"
+    "node": ">=22.12.0"
   }
 }

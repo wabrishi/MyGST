@@ -70,16 +70,18 @@ Hostinger's managed hosting provides **MySQL/MariaDB** and **Node.js app hosting
 
 1. **Create the database.** In hPanel, go to *Databases → MySQL Databases* and create a database and a user. Note the host: usually `localhost` for apps on the same plan, or the remote host shown in hPanel.
 2. **Push this project to a private GitHub repository.** `.env` is git-ignored.
-3. **Create the Node.js app.** In hPanel, go to *Websites → Add website → Node.js app*, import the GitHub repo, and pick framework **Next.js** and Node **20 or newer**.
-   - **Build command:** `npm run deploy:build` (runs `prisma generate`, `prisma migrate deploy`, `next build`)
-   - **Start command:** `npm start`
+3. **Create the Node.js app.** In hPanel, go to *Websites → Add website → Node.js app*, import the GitHub repo, and pick framework **Next.js**.
+   - **Node.js version: 22 or 24.** Node 20 is too old for several dependencies.
+   - **Build command:** `npm run build` (runs `prisma generate` + `next build --webpack`). The build uses webpack because Turbopack's separate CSS worker processes are killed on Hostinger's build servers.
+   - **Start command:** `npm start` (runs `prisma migrate deploy` and then `next start`). Database migrations are applied automatically when the app starts, so the build doesn't need database access.
+   - **Output directory:** `.next`
 4. **Set environment variables** in the app settings, using `.env.example` as the reference:
    - `DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/DBNAME`. URL-encode special characters in the password.
    - `BETTER_AUTH_SECRET`: a long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
    - `BETTER_AUTH_URL` and `APP_URL`: your public `https://` URL, exactly as users open it. Login is rejected from other origins.
    - `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`: a mailbox created under *Emails*.
    - `SUPER_ADMIN_EMAILS`: comma-separated emails allowed into `/admin`. Sign up with one of these emails to become a platform admin.
-5. **Point your domain and enable SSL** (free SSL in hPanel), then deploy. Each push to the branch redeploys, and pending migrations run automatically during the build.
+5. **Point your domain and enable SSL** (free SSL in hPanel), then deploy. Each push to the branch redeploys, and pending migrations run automatically when the app starts.
 6. **Backups:** enable Hostinger's daily backups. Company owners can also download a full JSON export under *Settings → Company → Export all data*.
 
 Notes:
