@@ -1,25 +1,17 @@
 import "server-only";
-import path from "node:path";
-import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { DOC_KINDS, kindOfType } from "../doc-kinds";
 import type { LoadedDocument } from "../documents";
 import { formatPaise, taxSummary } from "../gst/calc";
 import { sgstLabel, stateName } from "../gst/states";
 import { paiseToWords } from "../gst/words";
+import { pdfFonts } from "./fonts";
 
-const FONT_DIR = path.join(process.cwd(), "assets", "fonts");
-Font.register({
-  family: "Noto",
-  fonts: [
-    { src: path.join(FONT_DIR, "NotoSans-Regular.ttf"), fontWeight: "normal" },
-    { src: path.join(FONT_DIR, "NotoSans-Bold.ttf"), fontWeight: "bold" },
-  ],
-});
-Font.registerHyphenationCallback((w) => [w]);
+const FONTS = pdfFonts();
 
 const BORDER = "#9aa1ab";
 const s = StyleSheet.create({
-  page: { fontFamily: "Noto", fontSize: 8, padding: 24, paddingBottom: 40, color: "#111" },
+  page: { fontFamily: FONTS.family, fontSize: 8, padding: 24, paddingBottom: 40, color: "#111" },
   title: { fontSize: 13, fontWeight: "bold", textAlign: "center", letterSpacing: 1 },
   copy: { position: "absolute", right: 24, top: 26, fontSize: 7, color: "#555" },
   box: { borderWidth: 1, borderColor: BORDER },
@@ -193,7 +185,9 @@ export function DocumentPdf({ doc, logo }: { doc: LoadedDocument; logo: { data: 
             ))}
             <View style={[s.row, { justifyContent: "space-between", borderTopWidth: 1, borderColor: BORDER, paddingTop: 3, marginTop: 2 }]}>
               <Text style={s.big}>Total</Text>
-              <Text style={s.big}>₹ {amt(doc.grandTotal)}</Text>
+              <Text style={s.big}>
+                {FONTS.rupee} {amt(doc.grandTotal)}
+              </Text>
             </View>
           </View>
         </View>

@@ -63,7 +63,11 @@ export async function emailDoc(companyId: string, id: string, to: string): Promi
     if (!doc) throw new UserError("Document not found");
     const company = await db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { logo: true, logoMime: true } });
     const logo = company.logo && company.logoMime !== "image/webp" ? { data: Buffer.from(company.logo), mime: company.logoMime ?? "image/png" } : null;
-    const pdf = await renderDocumentPdf(doc, logo);
+    // Fall back to no logo if the stored image can't be embedded.
+    const pdf = await renderDocumentPdf(doc, logo).catch((err) => {
+      console.error(`[pdf] email render failed for ${doc.number}, retrying without logo:`, err);
+      return renderDocumentPdf(doc, null);
+    });
     const kind = DOC_KINDS[kindOfType(doc.type)];
     const from = doc.seller.tradeName || doc.seller.legalName;
     await sendMail({
