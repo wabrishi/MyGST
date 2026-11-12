@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
 import { SearchBox } from "@/components/search-box";
-import { Badge, ButtonLink, Card, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Users as UsersIcon } from "lucide-react";
+import { Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th } from "@/components/ui";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { stateName } from "@/lib/gst/states";
@@ -34,25 +35,24 @@ export default async function PartiesPage({ params, searchParams }: PageProps<"/
       <PageHeader title="Parties" subtitle="Customers and suppliers" actions={<ButtonLink href={`${base}/new`}>+ New party</ButtonLink>} />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SearchBox placeholder="Search name, GSTIN, phone" />
-        <div className="flex gap-1 text-xs">
-          {[
-            ["", "All"],
-            ["customers", "Customers"],
-            ["suppliers", "Suppliers"],
-          ].map(([v, l]) => (
-            <Link
-              key={v}
-              href={v ? `${base}?type=${v}` : base}
-              className={`rounded-full px-3 py-1 ${type === v ? "bg-primary text-white" : "bg-surface text-muted border border-border"}`}
-            >
-              {l}
-            </Link>
-          ))}
-        </div>
+        <FilterPills
+          active={type}
+          items={[
+            { value: "", label: "All", href: base },
+            { value: "customers", label: "Customers", href: `${base}?type=customers` },
+            { value: "suppliers", label: "Suppliers", href: `${base}?type=suppliers` },
+          ]}
+        />
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>{q ? "No parties match your search." : "No parties yet. Add your first customer."}</Empty>
+          <Empty
+            icon={UsersIcon}
+            title={q ? "No matches" : "No parties yet"}
+            action={!q && <ButtonLink href={`${base}/new`} size="sm">Add your first customer</ButtonLink>}
+          >
+            {q ? "No parties match your search." : "Customers and suppliers you add appear here."}
+          </Empty>
         ) : (
           <Table>
             <thead>

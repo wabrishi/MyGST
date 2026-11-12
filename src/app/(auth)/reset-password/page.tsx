@@ -26,8 +26,11 @@ function ResetForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Choose a new password</h1>
+    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+      <div className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Choose a new password</h1>
+        <p className="mt-1.5 text-sm text-muted">Use at least 8 characters.</p>
+      </div>
       {error && <Alert>{error}</Alert>}
       <Field label="New password" hint="At least 8 characters">
         <Input name="password" type="password" required minLength={8} autoFocus />
@@ -35,7 +38,7 @@ function ResetForm() {
       <Field label="Confirm password">
         <Input name="confirm" type="password" required minLength={8} />
       </Field>
-      <Button disabled={pending}>{pending ? "Saving…" : "Update password"}</Button>
+      <Button size="lg" disabled={pending}>{pending ? "Saving…" : "Update password"}</Button>
     </form>
   );
 }

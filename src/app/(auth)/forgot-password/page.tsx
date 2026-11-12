@@ -24,8 +24,11 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Reset password</h1>
+    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+      <div className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Reset password</h1>
+        <p className="mt-1.5 text-sm text-muted">Enter your email and we&apos;ll send you a reset link.</p>
+      </div>
       {sent ? (
         <Alert kind="success">If an account exists for that email, a reset link has been sent.</Alert>
       ) : (
@@ -34,10 +37,10 @@ export default function ForgotPasswordPage() {
           <Field label="Email">
             <Input name="email" type="email" required autoFocus />
           </Field>
-          <Button disabled={pending}>{pending ? "Sending…" : "Send reset link"}</Button>
+          <Button size="lg" disabled={pending}>{pending ? "Sending…" : "Send reset link"}</Button>
         </>
       )}
-      <Link href="/login" className="text-center text-xs text-primary hover:underline">
+      <Link href="/login" className="text-center text-sm font-medium text-primary hover:underline">
         Back to sign in
       </Link>
     </form>

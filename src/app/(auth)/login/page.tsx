@@ -29,8 +29,11 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Sign in</h1>
+    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+      <div className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
+        <p className="mt-1.5 text-sm text-muted">Welcome back. Sign in to manage your invoices and returns.</p>
+      </div>
       {params.get("reset") && <Alert kind="success">Password updated. Please sign in.</Alert>}
       {error && <Alert>{error}</Alert>}
       <Field label="Email">
@@ -39,15 +42,16 @@ function LoginForm() {
       <Field label="Password">
         <Input name="password" type="password" autoComplete="current-password" required />
       </Field>
-      <Button disabled={pending}>{pending ? "Signing in…" : "Sign in"}</Button>
-      <div className="flex justify-between text-xs">
-        <Link href="/forgot-password" className="text-primary hover:underline">
-          Forgot password?
-        </Link>
-        <Link href={`/signup${params.get("next") ? `?next=${encodeURIComponent(params.get("next")!)}` : ""}`} className="text-primary hover:underline">
+      <Link href="/forgot-password" className="-mt-2 self-end text-[13px] font-medium text-primary hover:underline">
+        Forgot password?
+      </Link>
+      <Button size="lg" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</Button>
+      <p className="text-center text-sm text-muted">
+        New to MyGST?{" "}
+        <Link href={`/signup${params.get("next") ? `?next=${encodeURIComponent(params.get("next")!)}` : ""}`} className="font-medium text-primary hover:underline">
           Create an account
         </Link>
-      </div>
+      </p>
     </form>
   );
 }

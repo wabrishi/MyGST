@@ -14,6 +14,8 @@ export function FySwitcher({ companyId, fys, selected, lockedUntil }: { companyI
       value={selected}
       disabled={pending}
       aria-label="Financial year"
+      title="Financial year"
+      className="h-8 w-auto min-w-36 text-[13px] font-medium"
       onChange={(e) => {
         const fy = e.target.value;
         start(async () => {

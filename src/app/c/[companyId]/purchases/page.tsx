@@ -1,3 +1,4 @@
+import { ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { DateRangeFilter } from "@/components/date-range";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
@@ -54,7 +55,7 @@ export default async function PurchasesPage({ params, searchParams }: PageProps<
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>No purchase bills in this period.</Empty>
+          <Empty icon={ShoppingCart} title="No purchase bills in this period">Record supplier bills to track payables and input tax credit.</Empty>
         ) : (
           <Table>
             <thead>

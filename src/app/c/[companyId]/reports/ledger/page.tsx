@@ -1,3 +1,4 @@
+import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { Card, Empty, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -34,7 +35,7 @@ export default async function LedgerPage({ params, searchParams }: PageProps<"/c
       </div>
       {!ledger ? (
         <Card>
-          <Empty>Select a party to view their statement.</Empty>
+          <Empty icon={BookOpen} title="Choose a party">Select a customer or supplier above to view their statement.</Empty>
         </Card>
       ) : (
         <Card>

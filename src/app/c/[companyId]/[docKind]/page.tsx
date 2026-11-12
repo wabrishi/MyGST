@@ -1,3 +1,4 @@
+import { FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { DateRangeFilter } from "@/components/date-range";
@@ -65,7 +66,13 @@ export default async function DocListPage({ params, searchParams }: PageProps<"/
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>No {cfg.title.toLowerCase()} in this period.</Empty>
+          <Empty
+            icon={FileText}
+            title={q ? "No matches" : `No ${cfg.title.toLowerCase()} yet`}
+            action={!q && <ButtonLink href={`${base}/new`} size="sm">Create {cfg.singular.toLowerCase()}</ButtonLink>}
+          >
+            {q ? "Nothing matches your search in this period." : "Nothing in this period. Change the dates above or create a new one."}
+          </Empty>
         ) : (
           <Table>
             <thead>

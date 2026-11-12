@@ -1,3 +1,4 @@
+import { Package } from "lucide-react";
 import Link from "next/link";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
 import { SearchBox } from "@/components/search-box";
@@ -30,7 +31,13 @@ export default async function ProductsPage({ params, searchParams }: PageProps<"
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>{q ? "No products match your search." : "No products yet."}</Empty>
+          <Empty
+            icon={Package}
+            title={q ? "No matches" : "No products yet"}
+            action={!q && <ButtonLink href={`${base}/new`} size="sm">Add a product</ButtonLink>}
+          >
+            {q ? "No products match your search." : "Save products and services with HSN/SAC and GST rate to bill faster."}
+          </Empty>
         ) : (
           <Table>
             <thead>

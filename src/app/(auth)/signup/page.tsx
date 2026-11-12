@@ -32,8 +32,11 @@ function SignupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold">Create your account</h1>
+    <form onSubmit={onSubmit} className="flex flex-col gap-5">
+      <div className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Create your account</h1>
+        <p className="mt-1.5 text-sm text-muted">Start billing in minutes. No credit card required.</p>
+      </div>
       {error && <Alert>{error}</Alert>}
       <Field label="Your name">
         <Input name="name" autoComplete="name" required autoFocus maxLength={100} />
@@ -47,10 +50,10 @@ function SignupForm() {
       <Field label="Confirm password">
         <Input name="confirm" type="password" autoComplete="new-password" required minLength={8} />
       </Field>
-      <Button disabled={pending}>{pending ? "Creating…" : "Create account"}</Button>
-      <p className="text-center text-xs text-muted">
+      <Button size="lg" disabled={pending}>{pending ? "Creating…" : "Create account"}</Button>
+      <p className="text-center text-sm text-muted">
         Already have an account?{" "}
-        <Link href="/login" className="text-primary hover:underline">
+        <Link href="/login" className="font-medium text-primary hover:underline">
           Sign in
         </Link>
       </p>

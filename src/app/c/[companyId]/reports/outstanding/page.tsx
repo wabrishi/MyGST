@@ -1,3 +1,4 @@
+import { CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { Card, Empty, Table, Td, Th, cn } from "@/components/ui";
 import { formatINR } from "@/lib/gst/calc";
@@ -39,7 +40,7 @@ export default async function OutstandingPage({ params, searchParams }: PageProp
       </div>
       <Card>
         {data.rows.length === 0 ? (
-          <Empty>Nothing outstanding. 🎉</Empty>
+          <Empty icon={CheckCircle2} title="All settled">Nothing is outstanding right now.</Empty>
         ) : (
           <Table>
             <thead>

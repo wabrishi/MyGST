@@ -1,3 +1,4 @@
+import { HandCoins } from "lucide-react";
 import Link from "next/link";
 import { DateRangeFilter } from "@/components/date-range";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
@@ -60,7 +61,7 @@ export default async function PaymentsPage({ params, searchParams }: PageProps<"
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>No payments in this period.</Empty>
+          <Empty icon={HandCoins} title="No payments in this period">Record a payment received from a customer or paid to a supplier.</Empty>
         ) : (
           <Table>
             <thead>

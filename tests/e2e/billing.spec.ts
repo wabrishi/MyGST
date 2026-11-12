@@ -28,6 +28,7 @@ test("sales flow: invoices, quotation, credit note", async ({ page }) => {
 
   await test.step("inter-state invoice uses IGST", async () => {
     await page.goto(`${base}/invoices/new`);
+    await page.waitForLoadState("networkidle"); // let React hydrate before interacting
     const party = page.getByRole("combobox", { name: "Party" });
     const labels = await party.locator("option").allTextContents();
     await party.selectOption({ label: labels.find((l) => l.startsWith("Bengaluru Corp"))! });

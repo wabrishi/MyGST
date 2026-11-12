@@ -1,7 +1,8 @@
+import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
 import { SearchBox } from "@/components/search-box";
-import { Badge, ButtonLink, Card, Empty, PageHeader, Table, Td, Th, cn } from "@/components/ui";
+import { Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th } from "@/components/ui";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { stateName } from "@/lib/gst/states";
@@ -63,21 +64,11 @@ export default async function AdminCompaniesPage({ searchParams }: PageProps<"/a
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SearchBox placeholder="Search name, GSTIN, owner email" />
-        <div className="flex gap-1 text-xs">
-          {FILTERS.map(([v, l]) => (
-            <Link
-              key={v}
-              href={v ? `/admin?status=${v}` : "/admin"}
-              className={cn("rounded-full border px-3 py-1", filter === v ? "border-primary bg-primary text-white" : "border-border bg-surface text-muted")}
-            >
-              {l}
-            </Link>
-          ))}
-        </div>
+        <FilterPills active={filter} items={FILTERS.map(([v, l]) => ({ value: v, label: l, href: v ? `/admin?status=${v}` : "/admin" }))} />
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty>No companies found.</Empty>
+          <Empty icon={Building2} title="No companies found">Try a different search or filter.</Empty>
         ) : (
           <Table>
             <thead>

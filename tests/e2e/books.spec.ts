@@ -131,7 +131,7 @@ test("payments, purchases/ITC, reports, FY lock, roles and tenant isolation", as
     await expect(staff.getByRole("link", { name: "Settings" })).toHaveCount(0);
 
     await staff.goto(`${base}/invoices`);
-    await expect(staff.getByText(/No invoices in this period/)).toBeVisible(); // staff see only their own
+    await expect(staff.getByText(/No invoices yet/)).toBeVisible(); // staff see only their own
 
     await staff.goto(`${base}/settings/company`);
     await staff.waitForURL(/dashboard\?denied=1/);

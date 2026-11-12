@@ -1,40 +1,155 @@
 @import "tailwindcss";
 
+/* ───────────────────────── Design tokens ─────────────────────────
+   One source of truth for colour. Light theme by default, dark theme follows the OS setting. */
 :root {
   --background: #f6f7f9;
   --surface: #ffffff;
-  --foreground: #16181d;
-  --muted: #667085;
+  --surface-2: #f9fafb; /* table headers, subtle panels */
+  --subtle: #f1f3f6; /* hover fills */
+  --foreground: #0f172a;
+  --muted: #64748b;
   --border: #e4e7ec;
-  --primary: #1d4ed8;
+  --border-strong: #cfd4dc;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
   --primary-foreground: #ffffff;
-  --danger: #c0262d;
-  --success: #067647;
-  --warning: #b54708;
+  --primary-soft: #eef2ff;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --success: #15803d;
+  --success-soft: #f0fdf4;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --info: #0369a1;
+  --info-soft: #f0f9ff;
+  --ring: rgb(79 70 229 / 0.35);
+  /* Chart series (validated with the dataviz palette checker: CVD ΔE 31.4, contrast ≥ 3:1 on #ffffff) */
+  --series-1: #4f46e5;
+  --series-2: #eb6834;
+  --chart-grid: #eceef2;
+  --shadow-sm: 0 1px 2px rgb(16 24 40 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(16 24 40 / 0.08), 0 2px 4px -2px rgb(16 24 40 / 0.04);
+  --shadow-lg: 0 16px 40px -8px rgb(16 24 40 / 0.18);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0b0e14;
+    --surface: #121620;
+    --surface-2: #161b26;
+    --subtle: #1b2130;
+    --foreground: #e6e9ef;
+    --muted: #94a3b8;
+    --border: #252c3b;
+    --border-strong: #34405a;
+    --primary: #6d6af5;
+    --primary-hover: #8381f8;
+    --primary-foreground: #ffffff;
+    --primary-soft: #1d1f3d;
+    --danger: #f87171;
+    --danger-soft: #2a1416;
+    --success: #4ade80;
+    --success-soft: #10241a;
+    --warning: #fbbf24;
+    --warning-soft: #2a2010;
+    --info: #38bdf8;
+    --info-soft: #0f2130;
+    --ring: rgb(109 106 245 / 0.45);
+    /* CVD ΔE 30.5, contrast ≥ 3:1 on #121620 */
+    --series-1: #6d6af5;
+    --series-2: #d95926;
+    --chart-grid: #222939;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 16px 40px -8px rgb(0 0 0 / 0.6);
+    color-scheme: dark;
+  }
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-subtle: var(--subtle);
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
   --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
   --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --shadow-xs: var(--shadow-sm);
+  --shadow-card: var(--shadow-sm);
+  --shadow-pop: var(--shadow-md);
+  --shadow-modal: var(--shadow-lg);
+}
+
+/* ───────────────────────── Base ───────────────────────── */
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+/* Visible keyboard focus everywhere, invisible for mouse users. */
+:where(a, button, select, input, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--ring);
+  border-radius: 6px;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
 }
 
 .tabular {
   font-variant-numeric: tabular-nums;
+}
+
+/* Native <select> with a consistent chevron in both themes. */
+select.field-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+}
+
+/* Thin, theme-aware scrollbars. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
 }
 
 @media print {

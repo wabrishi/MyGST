@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CenteredShell } from "@/components/centered-shell";
 import { redirect } from "next/navigation";
 import { Alert, Badge, ButtonLink, Card } from "@/components/ui";
 import { isSuperAdmin } from "@/lib/admin";
@@ -22,8 +23,8 @@ export default async function CompaniesPage({ searchParams }: PageProps<"/compan
   }
 
   return (
-    <main className="mx-auto w-full max-w-xl px-4 py-10">
-      <h1 className="mb-4 text-xl font-semibold">Your company</h1>
+    <CenteredShell>
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Your company</h1>
       {sp.suspended && (
         <div className="mb-4">
           <Alert kind="warning">That company is suspended. Contact support to reactivate it.</Alert>
@@ -59,6 +60,6 @@ export default async function CompaniesPage({ searchParams }: PageProps<"/compan
           + Create your company
         </ButtonLink>
       )}
-    </main>
+    </CenteredShell>
   );
 }

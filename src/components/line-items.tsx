@@ -114,20 +114,20 @@ export function LineItemsTable({
 
   return (
     <Card className="overflow-x-auto">
-      <table className="w-full min-w-[960px] text-sm [&_td]:px-1.5 [&_td]:py-1.5 [&_th]:px-1.5 [&_th]:py-2">
-        <thead className="bg-background text-left text-xs text-muted">
+      <table className="w-full min-w-[1040px] text-sm [&_td]:px-1.5 [&_td]:py-2 [&_th]:px-1.5 [&_th]:py-2.5 [&_input]:px-2 [&_select]:pl-2 [&_select]:pr-7">
+        <thead className="bg-surface-2 text-left text-xs font-medium uppercase tracking-wide text-muted">
           <tr>
-            <th className="w-8">#</th>
+            <th className="w-10 pl-4">#</th>
             <th className="w-48">Product</th>
             <th>Description</th>
             <th className="w-24">HSN/SAC</th>
-            <th className="w-20">Qty</th>
-            <th className="w-20">Unit</th>
+            <th className="w-24">Qty</th>
+            <th className="w-24">Unit</th>
             <th className="w-28">Rate</th>
-            <th className="w-16">Disc %</th>
-            <th className="w-20">GST %</th>
-            <th className="w-28 text-right">Amount</th>
-            <th className="w-8" />
+            <th className="w-20">Disc %</th>
+            <th className="w-28">GST %</th>
+            <th className="w-32 text-right">Amount</th>
+            <th className="w-10" />
           </tr>
         </thead>
         <tbody>
@@ -135,7 +135,7 @@ export function LineItemsTable({
             const err = (f: string) => fieldErrors[`items.${idx}.${f}`];
             return (
               <tr key={l.key} className="border-t border-border align-top">
-                <td className="pt-3 text-muted">{idx + 1}</td>
+                <td className="pl-4 pt-4 text-muted">{idx + 1}</td>
                 <td>
                   <Select value={l.productId} onChange={(e) => onProduct(l.key, e.target.value)} aria-label={`Line ${idx + 1} product`}>
                     <option value="">— custom —</option>
@@ -176,7 +176,7 @@ export function LineItemsTable({
                     ))}
                   </Select>
                 </td>
-                <td className="tabular pt-3 text-right">{formatINR(taxable[idx] ?? 0)}</td>
+                <td className="tabular pt-4 text-right font-medium">{formatINR(taxable[idx] ?? 0)}</td>
                 <td>
                   <Button
                     type="button"
@@ -198,7 +198,7 @@ export function LineItemsTable({
           <option key={u} value={u} />
         ))}
       </datalist>
-      <div className="border-t border-border p-2">
+      <div className="border-t border-border px-4 py-3">
         <Button type="button" variant="secondary" onClick={() => setLines((ls) => [...ls, blankLine()])}>
           + Add line
         </Button>

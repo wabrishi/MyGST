@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { redirect } from "next/navigation";
-import { Alert, ButtonLink } from "@/components/ui";
+import { CenteredShell } from "@/components/centered-shell";
+import { Alert, ButtonLink, Card } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { userCompany } from "@/lib/one-company";
@@ -53,12 +54,14 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-col gap-4 px-4 py-16">
-      <h1 className="text-xl font-semibold">Company invitation</h1>
+    <CenteredShell width="sm">
+      <Card className="flex flex-col gap-4 p-6">
+      <h1 className="text-xl font-semibold tracking-tight">Company invitation</h1>
       {body}
       <ButtonLink href="/companies" variant="ghost" className="self-start">
         Go to my companies
       </ButtonLink>
-    </main>
+      </Card>
+    </CenteredShell>
   );
 }

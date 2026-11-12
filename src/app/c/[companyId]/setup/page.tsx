@@ -154,7 +154,7 @@ export default async function SetupPage({ params, searchParams }: PageProps<"/c/
                   aria-current={s.step === step ? "step" : undefined}
                   className={cn(
                     "flex items-start gap-2 rounded-md px-2 py-2",
-                    s.step === step ? "bg-primary/10 text-primary" : "hover:bg-black/5",
+                    s.step === step ? "bg-primary/10 text-primary" : "hover:bg-subtle",
                   )}
                 >
                   <span
