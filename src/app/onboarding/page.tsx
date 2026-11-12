@@ -2,6 +2,8 @@ import { CenteredShell } from "@/components/centered-shell";
 import { CompanyForm } from "@/components/company-form";
 import { Alert, ButtonLink } from "@/components/ui";
 import { requireUser } from "@/lib/auth";
+import { db } from "@/lib/db";
+import { hubMode, hubUrl } from "@/lib/hub-rules";
 import { userCompany } from "@/lib/one-company";
 import { createCompany } from "./actions";
 
@@ -24,6 +26,25 @@ export default async function OnboardingPage() {
         <ButtonLink href={`/c/${existing.id}/dashboard`} className="self-start">
           Go to {existing.tradeName || existing.legalName}
         </ButtonLink>
+        </div>
+      </CenteredShell>
+    );
+  }
+
+  // Hub mode: companies come from the suite Hub (workspace + GST subscription), never created here.
+  if (hubMode()) {
+    const notice = (await db.user.findUnique({ where: { id: user.id }, select: { hubNotice: true } }))?.hubNotice;
+    return (
+      <CenteredShell>
+        <div className="flex flex-col gap-4">
+          <h1 className="text-2xl font-semibold tracking-tight">No MyGST company yet</h1>
+          <Alert kind="info">
+            {notice ??
+              "Your suite workspace doesn't have MyGST access for this account yet. Ask your workspace owner to add you, or start GST Invoicing from your account."}
+          </Alert>
+          <ButtonLink href={`${hubUrl()}/home`} className="self-start">
+            Open your suite account
+          </ButtonLink>
         </div>
       </CenteredShell>
     );

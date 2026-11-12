@@ -10,6 +10,8 @@ const TABS = [
   ["numbering", "Numbering"],
   ["financial-years", "Financial years"],
   ["backup", "Backup"],
+  ["api-keys", "API keys"],
+  ["integrations", "Integrations"],
   ["/setup", "Setup wizard"],
 ] as const;
 

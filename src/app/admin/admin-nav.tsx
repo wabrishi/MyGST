@@ -10,11 +10,12 @@ const LINKS = [
   { href: "/admin/backups", label: "Backups", match: (p: string) => p.startsWith("/admin/backups") },
 ];
 
-export function AdminNav() {
+export function AdminNav({ hubAdminUrl }: { hubAdminUrl?: string | null }) {
   const pathname = usePathname();
+  const links = hubAdminUrl ? LINKS.filter((l) => l.href !== "/admin/companies/new") : LINKS;
   return (
     <nav className="flex items-center gap-1 text-[13.5px]" aria-label="Admin">
-      {LINKS.map((l) => (
+      {links.map((l) => (
         <Link
           key={l.href}
           href={l.href}
@@ -27,6 +28,11 @@ export function AdminNav() {
           {l.label}
         </Link>
       ))}
+      {hubAdminUrl && (
+        <a href={hubAdminUrl} className="rounded-lg px-3 py-1.5 font-medium text-muted transition-colors hover:bg-subtle hover:text-foreground">
+          Suite admin ↗
+        </a>
+      )}
     </nav>
   );
 }

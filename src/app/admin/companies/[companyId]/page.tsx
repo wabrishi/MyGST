@@ -46,7 +46,7 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
           <span className="flex flex-wrap items-center gap-2">
             {c.suspendedAt ? <Badge color="red">Suspended</Badge> : c.setupCompletedAt ? <Badge color="green">Active</Badge> : <Badge color="amber">Setup pending</Badge>}
             {c.gstin || "Unregistered"} · {stateName(c.stateCode)} · created {c.createdAt.toISOString().slice(0, 10)}
-            {c.createdVia === "ADMIN" ? " by admin" : " via sign-up"}
+            {c.createdVia === "ADMIN" ? " by admin" : c.createdVia === "HUB" ? " from the suite Hub" : " via sign-up"}
           </span>
         }
         actions={<SuspendButton companyId={c.id} suspended={!!c.suspendedAt} />}

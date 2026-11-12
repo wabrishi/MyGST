@@ -1,3 +1,4 @@
+import { hubMode, hubUrl } from "@/lib/hub-rules";
 import { Building2 } from "lucide-react";
 import Link from "next/link";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
@@ -60,7 +61,7 @@ export default async function AdminCompaniesPage({ searchParams }: PageProps<"/a
       <PageHeader
         title="Companies"
         subtitle={`${total} total · ${pending} with setup pending · ${suspended} suspended`}
-        actions={<ButtonLink href="/admin/companies/new">+ New company</ButtonLink>}
+        actions={hubMode() ? <ButtonLink href={`${hubUrl()}/admin`} variant="secondary">Create in suite admin ↗</ButtonLink> : <ButtonLink href="/admin/companies/new">+ New company</ButtonLink>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SearchBox placeholder="Search name, GSTIN, owner email" />
@@ -103,7 +104,7 @@ export default async function AdminCompaniesPage({ searchParams }: PageProps<"/a
                   </Td>
                   <Td className="text-xs text-muted">
                     {c.createdAt.toISOString().slice(0, 10)}
-                    {c.createdVia === "ADMIN" && " · by admin"}
+                    {c.createdVia === "ADMIN" ? " · by admin" : c.createdVia === "HUB" && " · from Hub"}
                   </Td>
                 </tr>
               ))}

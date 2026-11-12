@@ -1,5 +1,6 @@
 import { Card, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
+import { hubMode, hubTeamUrl } from "@/lib/hub-rules";
 import { ROLE_LABEL } from "@/lib/permissions";
 import { requireCompanyPage } from "@/lib/tenant";
 import { InviteForm, MemberActions, RevokeInviteButton } from "./users-client";
@@ -17,9 +18,23 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
     }),
     db.invitation.findMany({ where: { companyId: ctx.companyId, acceptedAt: null }, orderBy: { createdAt: "desc" } }),
   ]);
+  const hub = hubMode();
+  const hubWorkspaceId = hub ? (await db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { hubWorkspaceId: true } })).hubWorkspaceId : null;
 
   return (
     <div className="flex flex-col gap-5">
+      {hub ? (
+        <Card className="p-5">
+          <h2 className="mb-1 font-semibold">Members are managed in your suite account</h2>
+          <p className="mb-3 text-sm text-muted">
+            Add, remove and change roles on the Team page. Hub Owner = Owner, Manager = Accountant, Member = Staff. New members get access on
+            their first sign-in.
+          </p>
+          <a href={hubTeamUrl(hubWorkspaceId)} className="text-sm font-semibold text-primary hover:underline">
+            Open Team page
+          </a>
+        </Card>
+      ) : (
       <Card className="p-5">
         <h2 className="mb-1 font-semibold">Invite a user</h2>
         <p className="mb-3 text-xs text-muted">
@@ -28,6 +43,7 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
         </p>
         <InviteForm companyId={ctx.companyId} />
       </Card>
+      )}
 
       <Card>
         <Table>
@@ -48,7 +64,7 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
                 </Td>
                 <Td>{m.user.email}</Td>
                 <Td colSpan={2}>
-                  <MemberActions companyId={ctx.companyId} membershipId={m.id} role={m.role} />
+                  {hub ? ROLE_LABEL[m.role] : <MemberActions companyId={ctx.companyId} membershipId={m.id} role={m.role} />}
                 </Td>
               </tr>
             ))}

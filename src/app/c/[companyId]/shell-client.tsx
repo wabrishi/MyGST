@@ -2,12 +2,12 @@
 
 import { ChevronRight, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, Sparkles, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Avatar, Badge, cn } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
-import { authClient } from "@/lib/auth-client";
+import { signOutEverywhere } from "@/lib/auth-client";
 import { SideNav } from "./side-nav";
 
 // ───────────────────────── Mobile drawer ─────────────────────────
@@ -85,6 +85,8 @@ const LABELS: Record<string, string> = {
   numbering: "Numbering",
   "financial-years": "Financial years",
   backup: "Backup",
+  "api-keys": "API keys",
+  integrations: "Integrations",
 };
 
 export function Breadcrumbs({ companyId }: { companyId: string }) {
@@ -122,6 +124,7 @@ export function UserMenu({
   companyId,
   isOwner,
   isSuperAdmin,
+  hubLogoutUrl,
 }: {
   name: string;
   email: string;
@@ -129,10 +132,10 @@ export function UserMenu({
   companyId: string;
   isOwner: boolean;
   isSuperAdmin: boolean;
+  hubLogoutUrl?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const router = useRouter();
 
   useEffect(() => {
     if (!open) return;
@@ -197,11 +200,7 @@ export function UserMenu({
             role="menuitem"
             type="button"
             className={cn(item, "text-danger hover:text-danger")}
-            onClick={async () => {
-              await authClient.signOut();
-              router.replace("/login");
-              router.refresh();
-            }}
+            onClick={() => signOutEverywhere(hubLogoutUrl)}
           >
             <LogOut size={15} /> Sign out
           </button>

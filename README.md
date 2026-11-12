@@ -122,6 +122,54 @@ Notes:
 
 **Restoring:** company backups use the same format as *Export all data*. A guided restore tool is not built yet; restore is done by the operator.
 
+## Suite API (`/api/v1`) and events
+
+For the suite (Lead Manager, WBportal, Hub). The contract is in `LeadManager/docs/ARCHITECTURE.md` §4, §5 and §7.
+
+- **Auth:** owners create keys under *Settings → API keys*. Keys look like `mgk_…`, are shown once, and only their SHA-256 hash is stored. Requests send `Authorization: Bearer <key>`. A key acts as the owner who created it and stops working if that user leaves the company or the key is revoked. `X-Suite-Workspace` is accepted but ignored: the key decides the company. `Idempotency-Key` replays the first response for the same route for 24 h, marked with the `Idempotent-Replayed: true` header.
+- **Errors:** `{ "error": "message" }` with 400 (validation), 401 (key), 403 (suspended company), 415/413 (body), or 422 (business rule, e.g. unknown partyId).
+
+| Endpoint | Body / query | Response |
+|---|---|---|
+| `POST /api/v1/parties/upsert` | `{ name, phone, email, gstin, stateCode, billingAddress, externalRef }` | `201 { id, created: true }` or `200 { id, created: false }` |
+| `POST /api/v1/quotations` | `{ partyId, items: [{ name, hsn, qty, rate, gstRate }], notes, leadRef }` | `201 { id, number, url, total }` |
+| `GET /api/v1/documents?leadRef=…` | — | `{ data: [{ id, kind, number, total, status, url, date }] }` |
+
+- **Party matching:** GSTIN first, then phone (last 10 digits, ignoring formatting), then `externalRef`. A match only fills empty fields. An empty `stateCode` falls back to the GSTIN's state, then the company's own state.
+- **`leadRef`:** stored on the quotation (`document.externalRef`) and inherited by the invoice it is converted into.
+- **Events:** owners set the Lead Manager webhook URL under *Settings → Integrations*.
+  - **Types:** `quotation.created`, `quotation.converted`, `invoice.issued`, `invoice.cancelled`, `payment.received`.
+  - **Delivery:** written to `outbox_event` in the same transaction as the change, and delivered right after the request.
+  - **Retries:** a Hostinger Cron Job calls `GET /api/cron/tick` every minute with `Authorization: Bearer CRON_SECRET`. Failed deliveries retry after 1 m, 5 m, 30 m, 2 h and 12 h, then are marked failed.
+  - **Signing:** `X-Suite-Event-Id`, `X-Suite-Timestamp`, and `X-Suite-Signature: v1=<hex HMAC-SHA256(secret, "<ts>.<body>")>`.
+
+## Suite single sign-on (`AUTH_MODE=hub`)
+
+By default (`AUTH_MODE=local`) MyGST has its own email/password accounts. With `AUTH_MODE=hub` the suite Hub
+is the sign-in provider (OIDC) and owns workspaces, members and the GST subscription:
+
+- **Sign-in**: `/login` sends people to the Hub; `/signup`, `/forgot-password` and `/reset-password` redirect
+  there. Sign-out ends the MyGST session and then the Hub's (`HUB_URL/logout`). Register MyGST in the Hub with the
+  redirect URI `<APP_URL>/api/auth/callback/hub` (scopes `openid profile email suite`).
+- **Sync on every sign-in** (`src/lib/hub.ts`): the Hub workspace maps to a MyGST company
+  (`company.hubWorkspaceId`; a pre-Hub company named in the `tenants.gst` claim is linked instead of creating a
+  new one). Roles: Hub Owner → Owner, Manager → Accountant, Member → Staff. New companies start in the setup
+  wizard; documents are blocked until the state and address are filled in.
+- **One company per user is kept.** If the Hub puts someone in a workspace while they already belong to a
+  different MyGST company, nothing is moved or deleted: they keep their current access and see a notice
+  explaining what to do.
+- **Entitlement**: the `gst` module's plan is stored on the company. New documents are blocked after
+  `accessUntil` or when cancelled; `invoicesPerMonth` and `users` limits are enforced (-1 = unlimited). Owners
+  see a banner linking to `HUB_URL/w/<workspace>/billing`.
+- **Events**: the Hub posts to `POST /api/suite/events`, signed with `SUITE_EVENTS_SECRET` (HMAC, 5-minute
+  window, deduplicated by id): `subscription.updated` (module `gst`), `workspace.created/updated/suspended`,
+  `member.updated/removed` (removal deletes the membership and signs the person out). Point the Hub's
+  `GST_EVENTS_URL` here and use the same secret as its `GST_EVENTS_SECRET`.
+- Members are managed on the Hub's Team page, and companies are created from the Hub admin (MyGST's invite form
+  and "New company" are replaced by links).
+
+Switching an existing deployment to hub mode signs everyone out once (session cookies are prefixed `gst.`).
+
 ## GST notes & limitations (v1)
 
 - The GSTR-3B page is a working summary from your books. Reconcile ITC with GSTR-2B before filing.

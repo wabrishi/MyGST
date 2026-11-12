@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { Avatar, Badge } from "@/components/ui";
 import { requireSuperAdmin } from "@/lib/admin";
+import { hubMode, hubUrl } from "@/lib/hub-rules";
 import { AdminNav } from "./admin-nav";
 
 export const metadata = { title: { default: "Admin", template: "%s · MyGST Admin" } };
@@ -19,7 +20,7 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
               <ShieldCheck size={12} className="-ml-0.5" /> Super admin
             </Badge>
           </div>
-          <AdminNav />
+          <AdminNav hubAdminUrl={hubMode() ? `${hubUrl()}/admin` : null} />
           <div className="ml-auto flex items-center gap-3 text-[13px]">
             <Link href="/companies" className="hidden text-muted hover:text-foreground sm:inline">
               My company

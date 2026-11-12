@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import type { Role } from "@/generated/prisma/enums";
+import { UserError } from "./action";
 import { db } from "./db";
+import { hubMode } from "./hub-rules";
 import { escapeHtml, mailEnabled, sendMail } from "./mail";
 import { ROLE_LABEL } from "./permissions";
 
@@ -18,6 +20,8 @@ export async function createInvitation(opts: {
   role: Role;
   invitedBy: { id: string; name: string };
 }) {
+  // In hub mode the suite Hub owns members: people join by being added to the workspace there.
+  if (hubMode()) throw new UserError("Members are managed in your suite account (Team page). Add them there; they get access on their first sign-in.");
   const email = opts.email.trim().toLowerCase();
   const token = randomBytes(32).toString("base64url");
   await db.$transaction(async (tx) => {

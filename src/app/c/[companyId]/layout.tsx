@@ -5,6 +5,7 @@ import { isSuperAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { availableFys, getSelectedFy } from "@/lib/fy-context";
 import { financialYear, todayIST } from "@/lib/gst/fy";
+import { entitlementBanner, hubBillingUrl, hubMode, hubUrl } from "@/lib/hub";
 import { ROLE_LABEL, can } from "@/lib/permissions";
 import { requireCompany } from "@/lib/tenant";
 import { FySwitcher } from "./fy-switcher";
@@ -17,8 +18,11 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
   const [fys, selectedFy, company] = await Promise.all([
     availableFys(ctx.companyId),
     getSelectedFy(ctx.companyId),
-    db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { lockedUntil: true } }),
+    db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { lockedUntil: true, entitlement: true, hubWorkspaceId: true } }),
   ]);
+  const hub = hubMode();
+  const plan = entitlementBanner(company.entitlement);
+  const hubNotice = hub ? (await db.user.findUnique({ where: { id: ctx.user.id }, select: { hubNotice: true } }))?.hubNotice : null;
   const lockedUntil = company.lockedUntil?.toISOString().slice(0, 10) ?? null;
   if (!fys.includes(selectedFy)) fys.unshift(selectedFy);
   const notCurrent = selectedFy !== financialYear(todayIST());
@@ -69,10 +73,31 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
               companyId={companyId}
               isOwner={can(ctx.role, "company.settings")}
               isSuperAdmin={isSuperAdmin(ctx.user)}
+              hubLogoutUrl={hub ? `${hubUrl()}/logout` : null}
             />
           </div>
         </header>
 
+        {plan && (
+          <div
+            role="status"
+            className={`no-print flex flex-wrap items-center gap-2 border-b px-4 py-2 text-[13px] md:px-6 ${plan.kind === "danger" ? "border-danger/25 bg-danger-soft text-danger" : "border-warning/25 bg-warning-soft text-warning"}`}
+          >
+            <AlertTriangle size={15} className="shrink-0" />
+            <span>{plan.text}</span>
+            {can(ctx.role, "company.settings") && (
+              <a href={hubBillingUrl(company.hubWorkspaceId)} className="font-semibold underline underline-offset-2">
+                Open billing
+              </a>
+            )}
+          </div>
+        )}
+        {hubNotice && (
+          <div role="status" className="no-print flex items-center gap-2 border-b border-warning/25 bg-warning-soft px-4 py-2 text-[13px] text-warning md:px-6">
+            <AlertTriangle size={15} className="shrink-0" />
+            <span>{hubNotice}</span>
+          </div>
+        )}
         {notCurrent && (
           <div className="no-print flex items-center gap-2 border-b border-warning/25 bg-warning-soft px-4 py-2 text-[13px] text-warning md:px-6">
             <AlertTriangle size={15} className="shrink-0" />

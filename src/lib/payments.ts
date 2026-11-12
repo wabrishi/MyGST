@@ -4,6 +4,7 @@ import type { PaymentDirection } from "@/generated/prisma/enums";
 import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
 import { isoOf } from "./documents";
+import { absoluteUrl, deliverSoon, enqueueEvent } from "./events/outbox";
 import { assertNotLocked } from "./fy-context";
 import { fromPaise, toPaise } from "./gst/calc";
 import type { CompanyContext } from "./tenant";
@@ -105,7 +106,7 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
   if (allocated > amount) throw new UserError("Allocated amount exceeds the payment amount");
   if (new Set(allocations.map((a) => a.targetId)).size !== allocations.length) throw new UserError("Duplicate allocation");
 
-  return runTx(async (tx) => {
+  const paymentId = await runTx(async (tx) => {
     await assertNotLocked(tx, ctx.companyId, input.date);
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId } });
     if (!party) throw new UserError("Select a valid party", "partyId");
@@ -149,8 +150,28 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
     await tx.auditLog.create({
       data: { companyId: ctx.companyId, userId: ctx.user.id, action: "create", entity: "payment", entityId: payment.id, data: { amount: input.amount } },
     });
+    if (input.direction === "RECEIVED") {
+      // leadRef from the first allocated document that came from Lead Manager (optional).
+      const linked = allocations.length
+        ? await tx.document.findFirst({ where: { id: { in: allocations.map((a) => a.targetId) }, externalRef: { not: null } }, select: { externalRef: true } })
+        : null;
+      await enqueueEvent(tx, ctx.companyId, "payment.received", {
+        id: payment.id,
+        number: input.reference,
+        total: fromPaise(amount),
+        amount: fromPaise(amount),
+        status: "RECEIVED",
+        url: absoluteUrl(`/c/${ctx.companyId}/payments/${payment.id}`),
+        leadRef: linked?.externalRef ?? undefined,
+        partyId: party.id,
+        invoiceIds: allocations.map((a) => a.targetId),
+        date: input.date,
+      });
+    }
     return payment.id;
   });
+  await deliverSoon(ctx.companyId);
+  return paymentId;
 }
 
 export async function deletePayment(ctx: CompanyContext, id: string) {

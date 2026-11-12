@@ -4,7 +4,9 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { DocType } from "@/generated/prisma/enums";
 import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
-import { NOTE_REASONS, isNote } from "./doc-kinds";
+import { assertCanCreateDocument } from "./hub";
+import { NOTE_REASONS, isNote, kindOfType } from "./doc-kinds";
+import { absoluteUrl, deliverSoon, enqueueEvent } from "./events/outbox";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { financialYear, todayIST } from "./gst/fy";
 import { isStateCode } from "./gst/states";
@@ -94,12 +96,21 @@ async function creditedPaise(tx: Tx, invoiceId: string, excludeId?: string) {
 
 // ───────────────────────── Save ─────────────────────────
 
-export async function saveDocument(ctx: CompanyContext, type: DocType, id: string | null, raw: DocInput) {
+/** Absolute link to a document in MyGST (used in API responses and events). */
+export const documentUrl = (companyId: string, type: DocType, id: string) => absoluteUrl(`/c/${companyId}/${kindOfType(type)}/${id}`);
+
+/**
+ * Creates or updates a sales document. `opts.externalRef` (Lead Manager leadRef) is only set on
+ * creation; editing in the UI never clears it.
+ */
+export async function saveDocument(ctx: CompanyContext, type: DocType, id: string | null, raw: DocInput, opts: { externalRef?: string } = {}) {
   const input = docInputSchema.parse(raw);
   const companyId = ctx.companyId;
 
-  return runTx(async (tx) => {
+  const savedId = await runTx(async (tx) => {
     const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
+    if (!company.stateCode) throw new UserError("Finish company setup (state and address) before creating documents.");
+    if (id === null) await assertCanCreateDocument(tx, companyId, type);
     if (type !== "QUOTATION") await assertNotLocked(tx, companyId, input.date);
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId } });
     if (!party) throw new UserError("Select a valid party", "partyId");
@@ -180,6 +191,14 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
       docId = id;
     } else {
       const num = await allocateNumber(tx, companyId, type, input.date);
+      // An invoice converted from a quotation inherits its leadRef, so Lead Manager can follow it.
+      const sourceQuote =
+        type === "INVOICE" && input.sourceQuotationId
+          ? await tx.document.findFirst({
+              where: { id: input.sourceQuotationId, companyId, type: "QUOTATION" },
+              select: { id: true, number: true, grandTotal: true, externalRef: true },
+            })
+          : null;
       const created = await tx.document.create({
         data: {
           ...header,
@@ -190,9 +209,39 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
           seq: num.seq,
           status: type === "QUOTATION" ? "OPEN" : "ISSUED",
           createdById: ctx.user.id,
+          externalRef: opts.externalRef || sourceQuote?.externalRef || null,
         },
       });
       docId = created.id;
+
+      // Suite events (recorded only when a Lead Manager webhook is configured).
+      const base = {
+        number: num.number,
+        total: totals.grandTotal / 100,
+        amount: totals.grandTotal / 100,
+        leadRef: created.externalRef ?? undefined,
+        partyId: party.id,
+      };
+      if (type === "QUOTATION") {
+        await enqueueEvent(tx, companyId, "quotation.created", { ...base, id: docId, status: "OPEN", url: documentUrl(companyId, type, docId) });
+      } else if (type === "INVOICE") {
+        await enqueueEvent(tx, companyId, "invoice.issued", { ...base, id: docId, status: "ISSUED", url: documentUrl(companyId, type, docId), date: input.date });
+        if (sourceQuote) {
+          await enqueueEvent(tx, companyId, "quotation.converted", {
+            id: sourceQuote.id,
+            number: sourceQuote.number,
+            total: sourceQuote.grandTotal.toNumber(),
+            amount: sourceQuote.grandTotal.toNumber(),
+            status: "CONVERTED",
+            url: documentUrl(companyId, "QUOTATION", sourceQuote.id),
+            leadRef: sourceQuote.externalRef ?? undefined,
+            partyId: party.id,
+            invoiceId: docId,
+            invoiceNumber: num.number,
+            invoiceUrl: documentUrl(companyId, type, docId),
+          });
+        }
+      }
 
       if (type === "INVOICE" && input.sourceQuotationId) {
         const marked = await tx.document.updateMany({
@@ -228,6 +277,8 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
     });
     return docId;
   });
+  await deliverSoon(companyId);
+  return savedId;
 }
 
 // ───────────────────────── Cancel ─────────────────────────
@@ -249,7 +300,20 @@ export async function cancelDocument(ctx: CompanyContext, id: string) {
     // Re-open the quotation this invoice came from.
     await tx.document.updateMany({ where: { convertedToId: id, companyId: ctx.companyId }, data: { status: "OPEN", convertedToId: null } });
     await tx.auditLog.create({ data: { companyId: ctx.companyId, userId: ctx.user.id, action: "cancel", entity: doc.type.toLowerCase(), entityId: id } });
+    if (doc.type === "INVOICE") {
+      await enqueueEvent(tx, ctx.companyId, "invoice.cancelled", {
+        id: doc.id,
+        number: doc.number,
+        total: doc.grandTotal.toNumber(),
+        amount: doc.grandTotal.toNumber(),
+        status: "CANCELLED",
+        url: documentUrl(ctx.companyId, doc.type, doc.id),
+        leadRef: doc.externalRef ?? undefined,
+        partyId: doc.partyId,
+      });
+    }
   });
+  await deliverSoon(ctx.companyId);
 }
 
 export async function setQuotationStatus(ctx: CompanyContext, id: string, status: "OPEN" | "ACCEPTED" | "EXPIRED") {

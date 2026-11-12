@@ -15,6 +15,8 @@ model User {
   email         String   @unique
   emailVerified Boolean  @default(false)
   image         String?  @db.Text
+  /// AUTH_MODE=hub: why the last Hub sign-in couldn't give this user access (shown to them); null when it did.
+  hubNotice     String?  @db.VarChar(300)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -81,25 +83,25 @@ enum Role {
 }
 
 model Company {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   legalName        String
-  tradeName        String   @default("")
-  gstin            String   @default("")
-  address          String   @default("") @db.VarChar(500)
-  city             String   @default("")
-  pincode          String   @default("")
-  stateCode        String   @db.Char(2)
-  phone            String   @default("")
-  email            String   @default("")
-  logo             Bytes?   @db.MediumBlob
+  tradeName        String    @default("")
+  gstin            String    @default("")
+  address          String    @default("") @db.VarChar(500)
+  city             String    @default("")
+  pincode          String    @default("")
+  stateCode        String    @db.Char(2)
+  phone            String    @default("")
+  email            String    @default("")
+  logo             Bytes?    @db.MediumBlob
   logoMime         String?
-  bankName         String   @default("")
-  bankAccount      String   @default("")
-  bankIfsc         String   @default("")
-  bankBranch       String   @default("")
-  upiId            String   @default("")
+  bankName         String    @default("")
+  bankAccount      String    @default("")
+  bankIfsc         String    @default("")
+  bankBranch       String    @default("")
+  upiId            String    @default("")
   terms            String?   @db.Text
-  pricesIncludeTax Boolean  @default(false)
+  pricesIncludeTax Boolean   @default(false)
   /// Books are locked (closed financial years) up to and including this date.
   lockedUntil      DateTime? @db.Date
   /// Set when the owner finishes the setup wizard.
@@ -108,19 +110,26 @@ model Company {
   suspendedAt      DateTime?
   /// "SIGNUP" (self-service) or "ADMIN" (created from the super-admin panel).
   createdVia       String    @default("SIGNUP")
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  /// AUTH_MODE=hub: the suite Hub workspace this company belongs to.
+  hubWorkspaceId   String?   @unique @db.VarChar(64)
+  /// AUTH_MODE=hub: the GST module entitlement from the Hub ({ plan, status, active, validUntil, accessUntil, limits }).
+  entitlement      Json?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  memberships  Membership[]
-  invitations  Invitation[]
-  parties      Party[]
-  products     Product[]
-  numberSeries NumberSeries[]
-  documents    Document[]
-  purchases    PurchaseBill[]
-  payments     Payment[]
-  auditLogs    AuditLog[]
+  memberships   Membership[]
+  invitations   Invitation[]
+  parties       Party[]
+  products      Product[]
+  numberSeries  NumberSeries[]
+  documents     Document[]
+  purchases     PurchaseBill[]
+  payments      Payment[]
+  auditLogs     AuditLog[]
   backupTargets BackupTarget[]
+  apiKeys       ApiKey[]
+  integration   CompanyIntegration?
+  outboxEvents  OutboxEvent[]
 
   @@map("company")
 }
@@ -193,6 +202,8 @@ model Party {
   shippingState   String?   @db.Char(2)
   openingBalance  Decimal   @default(0) @db.Decimal(14, 2) // +ve = they owe us, -ve = we owe them
   creditDays      Int       @default(0)
+  /// Reference from another suite service, e.g. "lead:<id>" (set by /api/v1/parties/upsert).
+  externalRef     String?   @db.VarChar(100)
   active          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -203,6 +214,7 @@ model Party {
   payments  Payment[]
 
   @@index([companyId, name])
+  @@index([companyId, externalRef])
   @@map("party")
 }
 
@@ -286,22 +298,25 @@ model Document {
   originalDocId    String? // credit/debit note -> invoice
   convertedToId    String? // quotation -> invoice
   noteReason       String    @default("")
-  notes            String?    @db.Text
+  /// Lead Manager lead id (leadRef) — set on API-created quotations and carried to the converted invoice.
+  externalRef      String?   @db.VarChar(100)
+  notes            String?   @db.Text
   createdById      String
   cancelledAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  company     Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  party       Party                @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  originalDoc Document?            @relation("NoteOf", fields: [originalDocId], references: [id], onDelete: Restrict)
-  notesOnThis Document[]           @relation("NoteOf")
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party       Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  originalDoc Document?           @relation("NoteOf", fields: [originalDocId], references: [id], onDelete: Restrict)
+  notesOnThis Document[]          @relation("NoteOf")
   items       DocumentItem[]
   allocations PaymentAllocation[]
 
   @@unique([companyId, type, fy, seq])
   @@unique([companyId, type, number])
   @@index([companyId, type, date])
+  @@index([companyId, externalRef])
   @@index([partyId])
   @@map("document")
 }
@@ -338,31 +353,31 @@ enum ItcType {
 }
 
 model PurchaseBill {
-  id            String    @id @default(cuid())
-  companyId     String
-  billNumber    String
-  billDate      DateTime  @db.Date
-  dueDate       DateTime? @db.Date
-  partyId       String
-  partyName     String
-  partyGstin    String    @default("")
-  partyState    String    @db.Char(2)
-  placeOfSupply String    @db.Char(2)
-  isInterstate  Boolean
-  reverseCharge Boolean   @default(false)
-  itcType       ItcType   @default(ELIGIBLE)
-  pricesIncludeTax Boolean @default(false)
-  taxableTotal  Decimal   @db.Decimal(14, 2)
-  cgst          Decimal   @db.Decimal(14, 2)
-  sgst          Decimal   @db.Decimal(14, 2)
-  igst          Decimal   @db.Decimal(14, 2)
-  roundOff      Decimal   @db.Decimal(6, 2)
-  grandTotal    Decimal   @db.Decimal(14, 2)
-  notes         String?    @db.Text
-  cancelled     Boolean   @default(false)
-  createdById   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  companyId        String
+  billNumber       String
+  billDate         DateTime  @db.Date
+  dueDate          DateTime? @db.Date
+  partyId          String
+  partyName        String
+  partyGstin       String    @default("")
+  partyState       String    @db.Char(2)
+  placeOfSupply    String    @db.Char(2)
+  isInterstate     Boolean
+  reverseCharge    Boolean   @default(false)
+  itcType          ItcType   @default(ELIGIBLE)
+  pricesIncludeTax Boolean   @default(false)
+  taxableTotal     Decimal   @db.Decimal(14, 2)
+  cgst             Decimal   @db.Decimal(14, 2)
+  sgst             Decimal   @db.Decimal(14, 2)
+  igst             Decimal   @db.Decimal(14, 2)
+  roundOff         Decimal   @db.Decimal(6, 2)
+  grandTotal       Decimal   @db.Decimal(14, 2)
+  notes            String?   @db.Text
+  cancelled        Boolean   @default(false)
+  createdById      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   party       Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
@@ -422,7 +437,7 @@ model Payment {
   amount      Decimal          @db.Decimal(14, 2)
   mode        PaymentMode      @default(BANK)
   reference   String           @default("")
-  notes       String?           @db.Text
+  notes       String?          @db.Text
   createdById String
   createdAt   DateTime         @default(now())
 
@@ -507,4 +522,90 @@ model BackupRun {
 
   @@index([targetId, startedAt])
   @@map("backup_run")
+}
+
+// ───────────────────────── Suite integration (API + events) ─────────────────────────
+
+/// Per-company API key for /api/v1. Only a SHA-256 hash is stored; the key is shown once.
+model ApiKey {
+  id          String    @id @default(cuid())
+  companyId   String
+  name        String
+  /// First characters of the key (e.g. "mgk_AbCd1234") so owners can tell keys apart.
+  prefix      String    @db.VarChar(20)
+  keyHash     String    @unique @db.Char(64)
+  createdById String
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  revokedAt   DateTime?
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@map("api_key")
+}
+
+/// Stored first response for (company, Idempotency-Key, route) — replayed for 24 h.
+model IdempotencyRecord {
+  id        String   @id @default(cuid())
+  companyId String
+  key       String   @db.VarChar(200)
+  route     String   @db.VarChar(100)
+  status    Int
+  response  Json
+  createdAt DateTime @default(now())
+
+  @@unique([companyId, key, route])
+  @@index([createdAt])
+  @@map("idempotency_record")
+}
+
+/// Outgoing webhook to Lead Manager (point-to-point until the Hub event router exists).
+model CompanyIntegration {
+  id               String   @id @default(cuid())
+  companyId        String   @unique
+  leadsWebhookUrl  String   @default("") @db.VarChar(500)
+  /// HMAC signing secret, AES-GCM encrypted (lib/backup/crypto.ts).
+  webhookSecretEnc String   @db.Text
+  enabled          Boolean  @default(true)
+  updatedAt        DateTime @updatedAt
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_integration")
+}
+
+enum OutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  DEAD
+}
+
+/// Transactional outbox: written in the same transaction as the business change, delivered by /api/cron/tick.
+model OutboxEvent {
+  id            String       @id // "evt_<hex>" — also the envelope id
+  companyId     String
+  type          String       @db.VarChar(60)
+  envelope      Json
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  nextAttemptAt DateTime     @default(now())
+  lastError     String?      @db.Text
+  createdAt     DateTime     @default(now())
+  sentAt        DateTime?
+  company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@index([companyId, createdAt])
+  @@map("outbox_event")
+}
+
+/// Ids of incoming suite (Hub) events already processed (delivery is at-least-once).
+model InboxEvent {
+  id         String   @id @db.VarChar(64)
+  source     String
+  type       String
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("inbox_event")
 }
