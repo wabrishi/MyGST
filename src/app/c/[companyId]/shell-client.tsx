@@ -2,12 +2,12 @@
 
 import { ChevronRight, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, Sparkles, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Avatar, Badge, cn } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
-import { signOutEverywhere } from "@/lib/auth-client";
+import { authClient } from "@/lib/auth-client";
 import { SideNav, type AppNavItem } from "./side-nav";
 
 // ───────────────────────── Mobile drawer ─────────────────────────
@@ -124,7 +124,6 @@ export function UserMenu({
   companyId,
   isOwner,
   isSuperAdmin,
-  hubLogoutUrl,
 }: {
   name: string;
   email: string;
@@ -132,8 +131,8 @@ export function UserMenu({
   companyId: string;
   isOwner: boolean;
   isSuperAdmin: boolean;
-  hubLogoutUrl?: string | null;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -200,7 +199,11 @@ export function UserMenu({
             role="menuitem"
             type="button"
             className={cn(item, "text-danger hover:text-danger")}
-            onClick={() => signOutEverywhere(hubLogoutUrl)}
+            onClick={async () => {
+              await authClient.signOut();
+              router.replace("/login");
+              router.refresh();
+            }}
           >
             <LogOut size={15} /> Sign out
           </button>

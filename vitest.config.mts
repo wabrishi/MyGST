@@ -17,8 +17,5 @@ export default defineConfig({
     environment: "node",
     include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
     testTimeout: 60_000,
-    // Tests run in local auth mode whatever .env says (hub.test.ts switches to hub mode itself);
-    // dotenv never overrides a variable that is already set.
-    env: { AUTH_MODE: "local" },
   },
 });

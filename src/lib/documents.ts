@@ -4,7 +4,6 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { DocType } from "@/generated/prisma/enums";
 import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
-import { assertCanCreateDocument } from "./hub";
 import { NOTE_REASONS, isNote, kindOfType } from "./doc-kinds";
 import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
@@ -112,7 +111,6 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
   const savedId = await runTx(async (tx) => {
     const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
     if (!company.stateCode) throw new UserError("Finish company setup (state and address) before creating documents.");
-    if (id === null) await assertCanCreateDocument(tx, companyId, type);
     if (type !== "QUOTATION") await assertNotLocked(tx, companyId, input.date);
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId } });
     if (!party) throw new UserError("Select a valid party", "partyId");
