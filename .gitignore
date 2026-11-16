@@ -48,3 +48,6 @@ next-env.d.ts
 /test-results
 /playwright-report
 /tests/e2e/.auth-*.json
+
+# example external plugin state
+/examples/external-plugin/data.json

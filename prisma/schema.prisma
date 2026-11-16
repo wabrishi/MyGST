@@ -130,6 +130,8 @@ model Company {
   apiKeys       ApiKey[]
   integration   CompanyIntegration?
   outboxEvents  OutboxEvent[]
+  plugins       CompanyPlugin[]
+  pluginData    PluginData[]
 
   @@map("company")
 }
@@ -204,6 +206,8 @@ model Party {
   creditDays      Int       @default(0)
   /// Reference from another suite service, e.g. "lead:<id>" (set by /api/v1/parties/upsert).
   externalRef     String?   @db.VarChar(100)
+  /// Values added by plugins ({ "<plugin>.<field>": value }), shown on the party page.
+  customFields    Json?
   active          Boolean   @default(true)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -300,6 +304,8 @@ model Document {
   noteReason       String    @default("")
   /// Lead Manager lead id (leadRef) — set on API-created quotations and carried to the converted invoice.
   externalRef      String?   @db.VarChar(100)
+  /// Values added by plugins ({ "<plugin>.<field>": { label, value, onPdf } }), shown on the document and PDF.
+  customFields     Json?
   notes            String?   @db.Text
   createdById      String
   cancelledAt      DateTime?
@@ -538,6 +544,10 @@ model ApiKey {
   createdAt   DateTime  @default(now())
   lastUsedAt  DateTime?
   revokedAt   DateTime?
+  /// Set for keys issued to an external plugin; those keys only get `scopes`.
+  pluginId    String?   @db.VarChar(64)
+  /// null = full access (keys created by owners). Plugin keys: ["documents:read", …].
+  scopes      Json?
   company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
@@ -592,6 +602,8 @@ model OutboxEvent {
   lastError     String?      @db.Text
   createdAt     DateTime     @default(now())
   sentAt        DateTime?
+  /// null = the company's Lead Manager webhook; otherwise the plugin that receives this event.
+  pluginId      String?      @db.VarChar(64)
   company       Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([status, nextAttemptAt])
@@ -608,4 +620,114 @@ model InboxEvent {
 
   @@index([receivedAt])
   @@map("inbox_event")
+}
+
+// ───────────────────────── Plugins ─────────────────────────
+
+enum PluginKind {
+  CODE
+  EXTERNAL
+}
+
+enum PluginStatus {
+  NOT_INSTALLED
+  INSTALLED
+  /// A code plugin whose folder was removed from the repo.
+  MISSING
+}
+
+enum PluginAvailability {
+  /// Every company except blocked ones.
+  ALL
+  /// Only companies with CompanyPlugin.allowed = true.
+  SELECTED
+  /// Kill switch: nobody.
+  NONE
+}
+
+/// A plugin known to this installation (code plugins are synced from src/plugins; external ones installed by URL).
+model Plugin {
+  id             String             @id @db.VarChar(64)
+  kind           PluginKind
+  name           String
+  version        String             @db.VarChar(40)
+  manifest       Json
+  manifestUrl    String?            @db.VarChar(1000)
+  status         PluginStatus       @default(NOT_INSTALLED)
+  availability   PluginAvailability @default(NONE)
+  /// On for each allowed company until its owner turns it off.
+  defaultEnabled Boolean            @default(false)
+  installedAt    DateTime?
+  installedBy    String?
+  lastError      String?            @db.VarChar(500)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  companies CompanyPlugin[]
+  data      PluginData[]
+  logs      PluginLog[]
+
+  @@map("plugin")
+}
+
+/// A plugin's state for one company: super-admin allow/block + owner on/off + settings.
+model CompanyPlugin {
+  id                  String    @id @default(cuid())
+  companyId           String
+  pluginId            String    @db.VarChar(64)
+  /// SELECTED availability: the super admin allowed this company.
+  allowed             Boolean   @default(false)
+  /// ALL availability: the super admin excluded this company.
+  blocked             Boolean   @default(false)
+  /// Owner's choice; null = follow Plugin.defaultEnabled.
+  enabled             Boolean?
+  /// Plugin settings (secret fields AES-encrypted as { enc: "..." }).
+  settings            Json?
+  acceptedPermissions Json?
+  /// Auto-paused after repeated failures; the owner re-enables it.
+  pausedReason        String?   @db.VarChar(300)
+  failureCount        Int       @default(0)
+  /// External plugins: secret their events are signed with (AES-encrypted) and the API key issued to them.
+  webhookSecretEnc    String?   @db.Text
+  apiKeyId            String?
+  enabledAt           DateTime?
+  enabledBy           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  company             Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plugin              Plugin    @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, pluginId])
+  @@index([pluginId])
+  @@map("company_plugin")
+}
+
+/// Key-value storage for plugins, isolated per plugin and company.
+model PluginData {
+  id        String   @id @default(cuid())
+  pluginId  String   @db.VarChar(64)
+  companyId String
+  key       String   @db.VarChar(191)
+  value     Json
+  updatedAt DateTime @updatedAt
+  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([pluginId, companyId, key])
+  @@index([companyId])
+  @@map("plugin_data")
+}
+
+model PluginLog {
+  id        String   @id @default(cuid())
+  pluginId  String   @db.VarChar(64)
+  companyId String?
+  level     String   @db.VarChar(10)
+  message   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId, createdAt])
+  @@index([createdAt])
+  @@map("plugin_log")
 }

@@ -4,7 +4,7 @@ import type { PaymentDirection } from "@/generated/prisma/enums";
 import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
 import { isoOf } from "./documents";
-import { absoluteUrl, deliverSoon, enqueueEvent } from "./events/outbox";
+import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { assertNotLocked } from "./fy-context";
 import { fromPaise, toPaise } from "./gst/calc";
 import type { CompanyContext } from "./tenant";
@@ -155,7 +155,7 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
       const linked = allocations.length
         ? await tx.document.findFirst({ where: { id: { in: allocations.map((a) => a.targetId) }, externalRef: { not: null } }, select: { externalRef: true } })
         : null;
-      await enqueueEvent(tx, ctx.companyId, "payment.received", {
+      await emitEvent(tx, ctx.companyId, "payment.received", {
         id: payment.id,
         number: input.reference,
         total: fromPaise(amount),
@@ -165,6 +165,18 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
         leadRef: linked?.externalRef ?? undefined,
         partyId: party.id,
         invoiceIds: allocations.map((a) => a.targetId),
+        date: input.date,
+      });
+    } else {
+      await emitEvent(tx, ctx.companyId, "payment.paid", {
+        id: payment.id,
+        number: input.reference,
+        total: fromPaise(amount),
+        amount: fromPaise(amount),
+        status: "PAID",
+        url: absoluteUrl(`/c/${ctx.companyId}/payments/${payment.id}`),
+        partyId: party.id,
+        billIds: allocations.map((a) => a.targetId),
         date: input.date,
       });
     }

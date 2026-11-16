@@ -7,6 +7,7 @@ import { availableFys, getSelectedFy } from "@/lib/fy-context";
 import { financialYear, todayIST } from "@/lib/gst/fy";
 import { entitlementBanner, hubBillingUrl, hubMode, hubUrl } from "@/lib/hub";
 import { ROLE_LABEL, can } from "@/lib/permissions";
+import { pluginNav } from "@/lib/plugins/ui";
 import { requireCompany } from "@/lib/tenant";
 import { FySwitcher } from "./fy-switcher";
 import { Breadcrumbs, MobileNav, UserMenu } from "./shell-client";
@@ -20,6 +21,7 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
     getSelectedFy(ctx.companyId),
     db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { lockedUntil: true, entitlement: true, hubWorkspaceId: true } }),
   ]);
+  const apps = await pluginNav(ctx).catch(() => []);
   const hub = hubMode();
   const plan = entitlementBanner(company.entitlement);
   const hubNotice = hub ? (await db.user.findUnique({ where: { id: ctx.user.id }, select: { hubNotice: true } }))?.hubNotice : null;
@@ -47,14 +49,14 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
           <Logo href={home} />
         </div>
         {companyCard}
-        <SideNav companyId={companyId} role={ctx.role} />
+        <SideNav companyId={companyId} role={ctx.role} apps={apps} />
         <div className="mt-auto px-5 pb-5 pt-6 text-[11px] text-muted">GST-ready billing · FY 20{selectedFy}</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-surface/85 px-4 backdrop-blur-md md:px-6">
-          <MobileNav header={<Logo href={home} />} top={companyCard} companyId={companyId} role={ctx.role} />
+          <MobileNav header={<Logo href={home} />} top={companyCard} companyId={companyId} role={ctx.role} apps={apps} />
           <div className="sm:hidden">
             <Logo href={home} size={24} />
           </div>

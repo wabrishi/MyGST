@@ -3,6 +3,7 @@ import { z } from "zod";
 import { UserError } from "./action";
 import { db, runTx } from "./db";
 import { isoOf, lineSchema } from "./documents";
+import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { assertNotLocked } from "./fy-context";
 import { isStateCode } from "./gst/states";
@@ -27,7 +28,7 @@ const rupees = (p: number) => fromPaise(p).toFixed(2);
 
 export async function savePurchase(ctx: CompanyContext, id: string | null, raw: PurchaseInput) {
   const input = purchaseSchema.parse(raw);
-  return runTx(async (tx) => {
+  const savedId = await runTx(async (tx) => {
     await assertNotLocked(tx, ctx.companyId, input.billDate);
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId } });
     if (!party) throw new UserError("Select a valid supplier", "partyId");
@@ -96,8 +97,21 @@ export async function savePurchase(ctx: CompanyContext, id: string | null, raw: 
     await tx.auditLog.create({
       data: { companyId: ctx.companyId, userId: ctx.user.id, action: id ? "update" : "create", entity: "purchase", entityId: billId },
     });
+    await emitEvent(tx, ctx.companyId, "purchase.saved", {
+      id: billId,
+      number: input.billNumber,
+      total: totals.grandTotal / 100,
+      amount: totals.grandTotal / 100,
+      status: id ? "UPDATED" : "CREATED",
+      url: absoluteUrl(`/c/${ctx.companyId}/purchases/${billId}`),
+      partyId: party.id,
+      date: input.billDate,
+      itcType: input.itcType,
+    });
     return billId;
   });
+  await deliverSoon(ctx.companyId);
+  return savedId;
 }
 
 export async function cancelPurchase(ctx: CompanyContext, id: string) {

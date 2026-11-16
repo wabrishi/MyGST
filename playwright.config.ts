@@ -16,6 +16,9 @@ export default defineConfig({
   webServer: {
     command: "npm run dev",
     url: "http://localhost:3000",
+    // E2E flows sign up with email/password: force local auth even if .env has AUTH_MODE=hub.
+    // (Next.js never overrides a variable that is already set.)
+    env: { AUTH_MODE: "local" },
     reuseExistingServer: true,
     timeout: 180_000,
   },

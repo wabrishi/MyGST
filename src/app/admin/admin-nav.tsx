@@ -7,6 +7,7 @@ import { cn } from "@/components/ui";
 const LINKS = [
   { href: "/admin", label: "Companies", match: (p: string) => p === "/admin" || (p.startsWith("/admin/companies/") && p !== "/admin/companies/new") },
   { href: "/admin/companies/new", label: "New company", match: (p: string) => p === "/admin/companies/new" },
+  { href: "/admin/plugins", label: "Plugins", match: (p: string) => p.startsWith("/admin/plugins") },
   { href: "/admin/backups", label: "Backups", match: (p: string) => p.startsWith("/admin/backups") },
 ];
 

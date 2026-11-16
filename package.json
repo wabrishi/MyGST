@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "prisma generate && next build --webpack",
+    "dev": "node scripts/plugins-sync.mjs && next dev",
+    "build": "node scripts/plugins-sync.mjs && prisma generate && next build --webpack",
     "start": "prisma migrate deploy && next start",
-    "deploy:build": "prisma generate && prisma migrate deploy && next build --webpack",
+    "deploy:build": "node scripts/plugins-sync.mjs && prisma generate && prisma migrate deploy && next build --webpack",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "postinstall": "prisma generate",
@@ -15,7 +15,9 @@
     "test": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:e2e": "playwright test",
-    "start:app": "next start"
+    "start:app": "next start",
+    "plugins:sync": "node scripts/plugins-sync.mjs",
+    "plugin:new": "node scripts/new-plugin.mjs"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.10.1",

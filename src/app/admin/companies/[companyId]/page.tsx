@@ -5,7 +5,9 @@ import { Badge, Card, PageHeader, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
 import { stateName } from "@/lib/gst/states";
 import { ROLE_LABEL } from "@/lib/permissions";
+import { STATE_LABEL, companyPluginState } from "@/lib/plugins/access";
 import { setupStatus } from "@/lib/setup";
+import { CompanyAccessToggle } from "../../plugins/plugins-client";
 import { AdminInviteForm, SuspendButton } from "./admin-company-client";
 
 export const metadata = { title: "Company" };
@@ -34,6 +36,7 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
   });
   if (!c) notFound();
   const status = await setupStatus(c.id);
+  const plugins = await db.plugin.findMany({ where: { status: "INSTALLED" }, orderBy: { name: "asc" }, include: { companies: { where: { companyId: c.id } } } });
 
   return (
     <>
@@ -129,6 +132,32 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
               <dd className="text-right">{c._count.products}</dd>
             </dl>
             <p className="mt-2 text-xs text-muted">Super-admins see counts only — company books stay private to its members.</p>
+          </Card>
+          <Card className="p-4 text-sm">
+            <h2 className="mb-2 font-semibold">Plugins</h2>
+            {plugins.length === 0 ? (
+              <p className="text-muted">
+                No plugins installed. <Link href="/admin/plugins" className="text-primary hover:underline">Manage plugins</Link>
+              </p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {plugins.map((p) => {
+                  const cp = p.companies[0];
+                  return (
+                    <li key={p.id} className="flex items-center justify-between gap-2">
+                      <span className="min-w-0">
+                        <Link href={`/admin/plugins/${p.id}`} className="font-medium hover:text-primary">
+                          {p.name}
+                        </Link>
+                        <span className="block text-xs text-muted">{STATE_LABEL[companyPluginState(p, cp)]}</span>
+                      </span>
+                      {p.availability === "SELECTED" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="allow" on={!!cp?.allowed} />}
+                      {p.availability === "ALL" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="block" on={!!cp?.blocked} />}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </Card>
         </div>
       </div>

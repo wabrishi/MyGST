@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
 import { decryptSecret } from "../backup/crypto";
 import { db, type Tx } from "../db";
+import type { PluginEvent as PluginEventType } from "../plugins/manifest";
 import { newEventId, nextAttempt, signPayload } from "./signing";
 
 export { BACKOFF_MS, newEventId, nextAttempt, signPayload, validateWebhookUrl } from "./signing";
@@ -12,6 +13,7 @@ export { BACKOFF_MS, newEventId, nextAttempt, signPayload, validateWebhookUrl } 
  */
 
 export type EventType = "quotation.created" | "quotation.converted" | "invoice.issued" | "invoice.cancelled" | "payment.received";
+const LEADS_EVENTS: readonly string[] = ["quotation.created", "quotation.converted", "invoice.issued", "invoice.cancelled", "payment.received"];
 
 export interface EventData {
   id: string;
@@ -37,6 +39,28 @@ export async function enqueueEvent(tx: Tx, companyId: string, type: EventType, d
   await tx.outboxEvent.create({ data: { id, companyId, type, envelope: envelope as Prisma.InputJsonValue } });
 }
 
+/**
+ * Records an event for everyone who listens: the company's Lead Manager webhook (its event types only)
+ * and every active plugin subscribed to it. Call inside the transaction that made the change, then
+ * deliverSoon() after it commits.
+ */
+export async function emitEvent(tx: Tx, companyId: string, type: PluginEventType, data: Record<string, unknown>) {
+  if (LEADS_EVENTS.includes(type)) await enqueueEvent(tx, companyId, type as EventType, data as EventData);
+  // Lazy: plugins/events → plugins/runner → plugins/context → this module.
+  const { enqueuePluginEvents } = await import("../plugins/events");
+  await enqueuePluginEvents(tx, companyId, type, data);
+}
+
+/** For changes saved outside a transaction (masters, settings): record + deliver; never fails the caller. */
+export async function emitStandalone(companyId: string, type: PluginEventType, data: Record<string, unknown>) {
+  try {
+    await db.$transaction((tx) => emitEvent(tx, companyId, type, data));
+    await deliverSoon(companyId);
+  } catch (e) {
+    console.error(`[events] ${type} not recorded:`, (e as Error).message);
+  }
+}
+
 const stripUndefined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ""));
 
 /**
@@ -54,7 +78,7 @@ export async function deliverPending(opts: { companyId?: string; limit?: number 
     where: { status: "PENDING", nextAttemptAt: { lte: now }, ...(opts.companyId && { companyId: opts.companyId }) },
     orderBy: { createdAt: "asc" },
     take: opts.limit ?? 50,
-    select: { id: true, companyId: true },
+    select: { id: true, companyId: true, pluginId: true },
   });
   const results = { sent: 0, failed: 0, dead: 0 };
   const integrations = new Map<string, { url: string; secret: string; enabled: boolean } | null>();
@@ -63,6 +87,19 @@ export async function deliverPending(opts: { companyId?: string; limit?: number 
     const claimed = await db.outboxEvent.updateMany({ where: { id: ev.id, status: "PENDING" }, data: { status: "SENDING", nextAttemptAt: new Date() } });
     if (claimed.count !== 1) continue;
     const row = await db.outboxEvent.findUniqueOrThrow({ where: { id: ev.id } });
+
+    if (row.pluginId) {
+      const { deliverPluginEvent } = await import("../plugins/delivery");
+      let r: Awaited<ReturnType<typeof deliverPluginEvent>>;
+      try {
+        r = await deliverPluginEvent({ id: row.id, companyId: row.companyId, pluginId: row.pluginId, envelope: row.envelope });
+      } catch (e) {
+        r = { ok: false, error: e instanceof Error ? e.message : String(e) };
+      }
+      const outcome = await settle(row, r.ok ? null : r.error, !r.ok && !!r.dead);
+      results[outcome]++;
+      continue;
+    }
 
     if (!integrations.has(ev.companyId)) {
       const i = await db.companyIntegration.findUnique({ where: { companyId: ev.companyId } });
@@ -97,21 +134,24 @@ export async function deliverPending(opts: { companyId?: string; limit?: number 
       error = e instanceof Error ? e.message : String(e);
     }
 
-    if (!error) {
-      await db.outboxEvent.update({ where: { id: row.id }, data: { status: "SENT", sentAt: new Date(), attempts: row.attempts + 1, lastError: null } });
-      results.sent++;
-    } else {
-      const attempts = row.attempts + 1;
-      const next = nextAttempt(attempts);
-      await db.outboxEvent.update({
-        where: { id: row.id },
-        data: next ? { status: "PENDING", attempts, nextAttemptAt: next, lastError: error } : { status: "DEAD", attempts, lastError: error },
-      });
-      if (next) results.failed++;
-      else results.dead++;
-    }
+    results[await settle(row, error)]++;
   }
   return { due: due.length, ...results };
+}
+
+/** Marks a delivery attempt: SENT, PENDING with backoff, or DEAD (retries used up, or `deadNow`). */
+async function settle(row: { id: string; attempts: number }, error: string | null, deadNow = false): Promise<"sent" | "failed" | "dead"> {
+  const attempts = row.attempts + 1;
+  if (!error) {
+    await db.outboxEvent.update({ where: { id: row.id }, data: { status: "SENT", sentAt: new Date(), attempts, lastError: null } });
+    return "sent";
+  }
+  const next = deadNow ? null : nextAttempt(attempts);
+  await db.outboxEvent.update({
+    where: { id: row.id },
+    data: next ? { status: "PENDING", attempts, nextAttemptAt: next, lastError: error.slice(0, 1000) } : { status: "DEAD", attempts, lastError: error.slice(0, 1000) },
+  });
+  return next ? "failed" : "dead";
 }
 
 /** Try to deliver right after the current request finishes (cron is the safety net). */

@@ -32,6 +32,7 @@ import { fmtPct, ratePct } from "@/lib/reports/kpi-math";
 import { dashboardKpis } from "@/lib/reports/kpis";
 import { setupStatus } from "@/lib/setup";
 import { requireCompany } from "@/lib/tenant";
+import { PluginWidgets } from "../plugin-slots";
 import { ChartCard } from "./chart-card";
 import { CashFlowChart, NetGstChart, SalesPurchasesChart } from "./charts";
 
@@ -482,6 +483,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps<
           </Card>
         </div>
       </div>
+      <PluginWidgets ctx={ctx} />
     </>
   );
 }

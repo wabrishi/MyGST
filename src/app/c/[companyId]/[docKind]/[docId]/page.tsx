@@ -9,6 +9,7 @@ import { formatINR } from "@/lib/gst/calc";
 import { creditNoteDeadline, todayIST } from "@/lib/gst/fy";
 import { can } from "@/lib/permissions";
 import { requireCompany } from "@/lib/tenant";
+import { PluginDocumentPanel, toSummary } from "../../plugin-slots";
 import { DocActions } from "./doc-actions";
 
 export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/[docKind]/[docId]">) {
@@ -108,6 +109,7 @@ export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/
               )}
             </dl>
           </Card>
+          <PluginDocumentPanel ctx={ctx} doc={toSummary(doc)} />
 
           {doc.payments.length > 0 && (
             <Card>

@@ -12,6 +12,7 @@ const TABS = [
   ["backup", "Backup"],
   ["api-keys", "API keys"],
   ["integrations", "Integrations"],
+  ["plugins", "Plugins"],
   ["/setup", "Setup wizard"],
 ] as const;
 

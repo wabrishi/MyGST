@@ -22,7 +22,7 @@ class ApiError extends Error {
  * who created the key, so audit logs and createdBy stay meaningful — and a key stops working if
  * that user leaves the company. `X-Suite-Workspace` is accepted but ignored: the key decides the company.
  */
-export async function authenticate(request: Request): Promise<CompanyContext & { apiKeyId: string }> {
+export async function authenticate(request: Request): Promise<CompanyContext & { apiKeyId: string; scopes: string[] | null; pluginId: string | null }> {
   const header = request.headers.get("authorization") ?? "";
   const key = header.replace(/^Bearer\s+/i, "").trim();
   if (!key || !looksLikeApiKey(key)) throw new ApiError("Missing or malformed API key", 401);
@@ -46,7 +46,8 @@ export async function authenticate(request: Request): Promise<CompanyContext & {
   }
   const { suspendedAt: _s, ...company } = row.company;
   void _s;
-  return { user: member.user, companyId: company.id, role: member.role, company, apiKeyId: row.id };
+  const scopes = Array.isArray(row.scopes) ? row.scopes.map(String) : null;
+  return { user: member.user, companyId: company.id, role: member.role, company, apiKeyId: row.id, scopes, pluginId: row.pluginId };
 }
 
 export async function readJson(request: Request): Promise<unknown> {
@@ -78,6 +79,13 @@ const IDEMPOTENCY_TTL_MS = 24 * 3600 * 1000;
  * Runs `handler` for an API route. With an `Idempotency-Key` header, the first response for
  * (company, key, route) is stored and replayed for 24 h; replays carry `Idempotent-Replayed: true`.
  */
+/** Scope a plugin-issued key needs for each route (owner-created keys have full access). */
+export const ROUTE_SCOPES: Record<string, string> = {
+  "documents.list": "documents:read",
+  "parties.upsert": "parties:write",
+  "quotations.create": "documents:write",
+};
+
 export async function handle(
   request: Request,
   route: string,
@@ -85,6 +93,8 @@ export async function handle(
 ) {
   try {
     const ctx = await authenticate(request);
+    const needed = ROUTE_SCOPES[route];
+    if (ctx.scopes && (!needed || !ctx.scopes.includes(needed))) throw new ApiError(`This plugin key lacks the "${needed ?? route}" permission`, 403);
     const idemKey = request.headers.get("idempotency-key")?.trim().slice(0, 200);
 
     if (idemKey) {

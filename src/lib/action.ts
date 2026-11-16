@@ -4,17 +4,13 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { ForbiddenError } from "./tenant";
 import { isOneCompanyConflict } from "./one-company";
+import { UserError } from "./user-error";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data: T; message?: string }
   | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
-/** Error with a message that is safe to show the user. */
-export class UserError extends Error {
-  constructor(message: string, public field?: string) {
-    super(message);
-  }
-}
+export { UserError };
 
 export const ok = <T>(data: T, message?: string): ActionResult<T> => ({ ok: true, data, message });
 

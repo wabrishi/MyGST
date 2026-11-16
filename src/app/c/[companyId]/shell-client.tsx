@@ -8,11 +8,11 @@ import { createPortal } from "react-dom";
 import { Avatar, Badge, cn } from "@/components/ui";
 import type { Role } from "@/generated/prisma/enums";
 import { signOutEverywhere } from "@/lib/auth-client";
-import { SideNav } from "./side-nav";
+import { SideNav, type AppNavItem } from "./side-nav";
 
 // ───────────────────────── Mobile drawer ─────────────────────────
 
-export function MobileNav({ header, top, companyId, role }: { header: ReactNode; top: ReactNode; companyId: string; role: Role }) {
+export function MobileNav({ header, top, companyId, role, apps = [] }: { header: ReactNode; top: ReactNode; companyId: string; role: Role; apps?: AppNavItem[] }) {
   const [open, setOpen] = useState(false); // links close the drawer via onNavigate
   useEffect(() => {
     if (!open) return;
@@ -48,7 +48,7 @@ export function MobileNav({ header, top, companyId, role }: { header: ReactNode;
               </button>
             </div>
             {top}
-            <SideNav companyId={companyId} role={role} onNavigate={() => setOpen(false)} />
+            <SideNav companyId={companyId} role={role} apps={apps} onNavigate={() => setOpen(false)} />
           </div>
         </div>,
           document.body,

@@ -108,7 +108,7 @@ export async function sendTestEvent(companyId: string): Promise<ActionResult<{ s
 export async function retryFailedEvents(companyId: string): Promise<ActionResult> {
   return run(async () => {
     const ctx = await requireCompany(companyId, "company.settings");
-    const r = await db.outboxEvent.updateMany({ where: { companyId: ctx.companyId, status: "DEAD" }, data: { status: "PENDING", attempts: 0, nextAttemptAt: new Date() } });
+    const r = await db.outboxEvent.updateMany({ where: { companyId: ctx.companyId, pluginId: null, status: "DEAD" }, data: { status: "PENDING", attempts: 0, nextAttemptAt: new Date() } });
     const sent = await deliverPending({ companyId: ctx.companyId, limit: 50 });
     revalidatePath(`/c/${ctx.companyId}/settings/integrations`);
     return ok(undefined, `${r.count} re-queued · ${sent.sent} delivered`);

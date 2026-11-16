@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { absoluteUrl, emitStandalone } from "@/lib/events/outbox";
 import { requireCompany } from "@/lib/tenant";
 import { partySchema, type PartyInput } from "@/lib/validation";
 
@@ -27,6 +28,17 @@ export async function saveParty(
       partyId = (await db.party.create({ data: { ...row, companyId: ctx.companyId } })).id;
     }
     await audit(ctx, id ? "update" : "create", "party", partyId);
+    await emitStandalone(ctx.companyId, "party.saved", {
+      id: partyId,
+      status: id ? "UPDATED" : "CREATED",
+      name: data.name,
+      type: data.type,
+      gstin: data.gstin,
+      phone: data.phone,
+      email: data.email,
+      stateCode: data.stateCode,
+      url: absoluteUrl(`/c/${ctx.companyId}/parties/${partyId}`),
+    });
     revalidatePath(`/c/${ctx.companyId}/parties`);
     return ok({ id: partyId });
   });

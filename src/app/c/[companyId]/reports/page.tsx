@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { requireCompanyPage } from "@/lib/tenant";
+import { pluginReportLinks } from "../plugin-slots";
+import { companyHref } from "@/lib/plugins/ui";
 
 export const metadata = { title: "Reports" };
 
@@ -16,6 +18,7 @@ const REPORTS = [
 export default async function ReportsPage({ params }: PageProps<"/c/[companyId]/reports">) {
   const { companyId } = await params;
   const ctx = await requireCompanyPage(companyId, "reports.view");
+  const extra = await pluginReportLinks({ ctx });
   return (
     <>
       <PageHeader title="Reports" subtitle="All reports default to the financial year selected in the sidebar." />
@@ -25,6 +28,14 @@ export default async function ReportsPage({ params }: PageProps<"/c/[companyId]/
             <Card className="h-full p-4 transition-colors hover:border-primary">
               <h2 className="font-semibold text-primary">{title}</h2>
               <p className="mt-1 text-muted">{desc}</p>
+            </Card>
+          </Link>
+        ))}
+        {extra.map((r, i) => (
+          <Link key={`plugin-${i}`} href={companyHref(ctx.companyId, r.href)}>
+            <Card className="h-full p-4 transition-colors hover:border-primary">
+              <h2 className="font-semibold text-primary">{r.label}</h2>
+              {r.description && <p className="mt-1 text-muted">{r.description}</p>}
             </Card>
           </Link>
         ))}

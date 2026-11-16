@@ -7,6 +7,7 @@ import type { DocType } from "@/generated/prisma/enums";
 import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { emitStandalone } from "@/lib/events/outbox";
 import { PREFIX_PATTERN, financialYear, todayIST } from "@/lib/gst/fy";
 import { createInvitation } from "@/lib/invitations";
 import { assertEmailHasNoCompany } from "@/lib/one-company";
@@ -22,6 +23,7 @@ export async function updateCompany(companyId: string, input: CompanyInput): Pro
     const data = companySchema.parse({ ...current, terms: current.terms ?? "", ...input });
     await db.company.update({ where: { id: ctx.companyId }, data });
     await audit(ctx, "update", "company", ctx.companyId);
+    await emitStandalone(ctx.companyId, "company.updated", { id: ctx.companyId, name: data.legalName, gstin: data.gstin, stateCode: data.stateCode });
     revalidatePath(`/c/${ctx.companyId}`, "layout");
     return ok(undefined, "Company details saved");
   });

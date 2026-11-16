@@ -170,6 +170,17 @@ is the sign-in provider (OIDC) and owns workspaces, members and the GST subscrip
 
 Switching an existing deployment to hub mode signs everyone out once (session cookies are prefixed `gst.`).
 
+## Plugins
+
+MyGST can be extended with plugins, managed by the super admin in **Admin → Plugins**:
+
+- **Code plugins** live in `src/plugins/<id>/` and ship with a deploy. They can hook into events, validate or enrich documents, add PDF sections, pages, dashboard widgets, reports and settings.
+- **External plugins** run on their own server and are installed from a manifest URL. They receive signed events, call `/api/v1` with a key limited to their permissions, and show pages in a frame.
+
+When installing, the super admin chooses whether the plugin starts **on by default** and who it's **available to**: all companies (with per-company blocks), selected companies, or nobody (kill switch). Owners turn available plugins on or off and configure them in **Settings → Plugins**.
+
+Building one: see the **[plugin developer guide](docs/plugins/README.md)**, or start with `npm run plugin:new -- my-plugin "My plugin"`. The examples are `invoice-footer`, `slack-notify`, `po-number` and `examples/external-plugin`.
+
 ## GST notes & limitations (v1)
 
 - The GSTR-3B page is a working summary from your books. Reconcile ITC with GSTR-2B before filing.

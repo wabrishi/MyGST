@@ -6,7 +6,7 @@ import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
 import { assertCanCreateDocument } from "./hub";
 import { NOTE_REASONS, isNote, kindOfType } from "./doc-kinds";
-import { absoluteUrl, deliverSoon, enqueueEvent } from "./events/outbox";
+import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { financialYear, todayIST } from "./gst/fy";
 import { isStateCode } from "./gst/states";
@@ -106,6 +106,8 @@ export const documentUrl = (companyId: string, type: DocType, id: string) => abs
 export async function saveDocument(ctx: CompanyContext, type: DocType, id: string | null, raw: DocInput, opts: { externalRef?: string } = {}) {
   const input = docInputSchema.parse(raw);
   const companyId = ctx.companyId;
+  // Plugin filters run before the transaction (they may call out over HTTP; no row locks held).
+  const plugin = await runDocumentFilters(ctx, type, id, input);
 
   const savedId = await runTx(async (tx) => {
     const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
@@ -162,7 +164,8 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
       grandTotal: rupees(totals.grandTotal),
       originalDocId: original?.id ?? null,
       noteReason: isNote(type) ? input.noteReason : "",
-      notes: input.notes,
+      notes: plugin.notes,
+      ...(plugin.customFields && { customFields: plugin.customFields as unknown as Prisma.InputJsonValue }),
     };
 
     let docId: string;
@@ -223,11 +226,11 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
         partyId: party.id,
       };
       if (type === "QUOTATION") {
-        await enqueueEvent(tx, companyId, "quotation.created", { ...base, id: docId, status: "OPEN", url: documentUrl(companyId, type, docId) });
+        await emitEvent(tx, companyId, "quotation.created", { ...base, id: docId, status: "OPEN", url: documentUrl(companyId, type, docId), date: input.date });
       } else if (type === "INVOICE") {
-        await enqueueEvent(tx, companyId, "invoice.issued", { ...base, id: docId, status: "ISSUED", url: documentUrl(companyId, type, docId), date: input.date });
+        await emitEvent(tx, companyId, "invoice.issued", { ...base, id: docId, status: "ISSUED", url: documentUrl(companyId, type, docId), date: input.date });
         if (sourceQuote) {
-          await enqueueEvent(tx, companyId, "quotation.converted", {
+          await emitEvent(tx, companyId, "quotation.converted", {
             id: sourceQuote.id,
             number: sourceQuote.number,
             total: sourceQuote.grandTotal.toNumber(),
@@ -241,6 +244,16 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
             invoiceUrl: documentUrl(companyId, type, docId),
           });
         }
+      } else {
+        await emitEvent(tx, companyId, type === "CREDIT_NOTE" ? "credit_note.issued" : "debit_note.issued", {
+          ...base,
+          id: docId,
+          status: "ISSUED",
+          url: documentUrl(companyId, type, docId),
+          date: input.date,
+          originalInvoiceId: original?.id,
+          reason: input.noteReason,
+        });
       }
 
       if (type === "INVOICE" && input.sourceQuotationId) {
@@ -281,6 +294,43 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
   return savedId;
 }
 
+// ───────────────────────── Plugin filters ─────────────────────────
+
+type ParsedDoc = z.output<typeof docInputSchema>;
+
+/**
+ * document.validate (may block the save) and document.beforeSave (may set notes / custom fields).
+ * Custom fields are kept from the existing document and merged with what plugins return.
+ */
+async function runDocumentFilters(ctx: CompanyContext, type: DocType, id: string | null, input: ParsedDoc) {
+  const { activeEntries, applyFilters } = await import("./plugins/runner");
+  const entries = await activeEntries(ctx.companyId);
+  const wants = (f: "document.validate" | "document.beforeSave") => entries.some((e) => e.manifest.filters.includes(f));
+  if (!wants("document.validate") && !wants("document.beforeSave")) return { notes: input.notes, customFields: null };
+
+  const party = await db.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId }, select: { id: true, name: true, gstin: true, stateCode: true, customFields: true } });
+  if (!party) return { notes: input.notes, customFields: null }; // the transaction reports the missing party
+  const args = {
+    type,
+    documentId: id,
+    input: {
+      partyId: input.partyId,
+      date: input.date,
+      dueDate: input.dueDate || null,
+      placeOfSupply: input.placeOfSupply,
+      notes: input.notes,
+      items: input.items.map((i) => ({ description: i.description, hsnSac: i.hsnSac, qty: i.qty, rate: i.rate, gstRate: i.gstRate })),
+    },
+    party: { ...party, customFields: (party.customFields ?? {}) as Record<string, unknown> },
+  };
+  const scope = { companyId: ctx.companyId, user: ctx.user, role: ctx.role };
+  await applyFilters(scope, "document.validate", undefined, args);
+  const existing = id ? await db.document.findFirst({ where: { id, companyId: ctx.companyId }, select: { customFields: true } }) : null;
+  const before = { notes: input.notes, customFields: { ...((existing?.customFields ?? {}) as unknown as Record<string, { label: string; value: string; onPdf?: boolean }>) } };
+  const after = await applyFilters(scope, "document.beforeSave", before, args);
+  return { notes: String(after.notes ?? input.notes).slice(0, 2000), customFields: after.customFields };
+}
+
 // ───────────────────────── Cancel ─────────────────────────
 
 export async function cancelDocument(ctx: CompanyContext, id: string) {
@@ -301,7 +351,7 @@ export async function cancelDocument(ctx: CompanyContext, id: string) {
     await tx.document.updateMany({ where: { convertedToId: id, companyId: ctx.companyId }, data: { status: "OPEN", convertedToId: null } });
     await tx.auditLog.create({ data: { companyId: ctx.companyId, userId: ctx.user.id, action: "cancel", entity: doc.type.toLowerCase(), entityId: id } });
     if (doc.type === "INVOICE") {
-      await enqueueEvent(tx, ctx.companyId, "invoice.cancelled", {
+      await emitEvent(tx, ctx.companyId, "invoice.cancelled", {
         id: doc.id,
         number: doc.number,
         total: doc.grandTotal.toNumber(),
@@ -374,6 +424,8 @@ export async function loadDocument(companyId: string, id: string) {
     convertedToId: d.convertedToId,
     noteReason: d.noteReason,
     notes: d.notes ?? "",
+    /** Added by plugins: { "<plugin>.<field>": { label, value, onPdf } } */
+    customFields: (d.customFields ?? {}) as unknown as Record<string, { label: string; value: string; onPdf?: boolean }>,
     createdById: d.createdById,
     createdAt: d.createdAt,
     payments: d.allocations.map((a) => ({

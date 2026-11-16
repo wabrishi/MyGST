@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { absoluteUrl, emitStandalone } from "@/lib/events/outbox";
 import { requireCompany } from "@/lib/tenant";
 import { productSchema, type ProductInput } from "@/lib/validation";
 
@@ -21,6 +22,15 @@ export async function saveProduct(companyId: string, id: string | null, input: P
       productId = (await db.product.create({ data: { ...data, companyId: ctx.companyId } })).id;
     }
     await audit(ctx, id ? "update" : "create", "product", productId);
+    await emitStandalone(ctx.companyId, "product.saved", {
+      id: productId,
+      status: id ? "UPDATED" : "CREATED",
+      name: data.name,
+      hsnSac: data.hsnSac,
+      salePrice: Number(data.salePrice),
+      gstRate: Number(data.gstRate),
+      url: absoluteUrl(`/c/${ctx.companyId}/products/${productId}`),
+    });
     revalidatePath(`/c/${ctx.companyId}/products`);
     return ok({ id: productId });
   });

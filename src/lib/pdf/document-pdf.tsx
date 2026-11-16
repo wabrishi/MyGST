@@ -51,7 +51,10 @@ function KV({ k, v }: { k: string; v?: string | null }) {
   );
 }
 
-export function DocumentPdf({ doc, logo }: { doc: LoadedDocument; logo: { data: Buffer; mime: string } | null }) {
+/** Extra blocks from plugins (pdf.sections filter + custom fields marked onPdf). */
+export type PdfExtraSection = { title?: string; lines: string[] };
+
+export function DocumentPdf({ doc, logo, extra = [] }: { doc: LoadedDocument; logo: { data: Buffer; mime: string } | null; extra?: PdfExtraSection[] }) {
   const kind = DOC_KINDS[kindOfType(doc.type)];
   const seller = doc.seller;
   const sLabel = sgstLabel(seller.stateCode);
@@ -226,6 +229,19 @@ export function DocumentPdf({ doc, logo }: { doc: LoadedDocument; logo: { data: 
           ))}
         </View>
 
+        {extra.length > 0 && (
+          <View style={[s.box, { borderTopWidth: 0 }]} wrap={false}>
+            {extra.map((sec, i) => (
+              <View key={i} style={[s.cell, i > 0 ? { borderTopWidth: 1, borderColor: BORDER } : {}]}>
+                {sec.title && <Text style={s.label}>{sec.title.toUpperCase()}</Text>}
+                {sec.lines.map((l, j) => (
+                  <Text key={j}>{l}</Text>
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* Bank, terms, signature */}
         <View style={[s.box, s.row, { borderTopWidth: 0, minHeight: 70 }]} wrap={false}>
           <View style={[s.cell, { flex: 1.4, borderRightWidth: 1, borderColor: BORDER }]}>
@@ -270,6 +286,6 @@ export function DocumentPdf({ doc, logo }: { doc: LoadedDocument; logo: { data: 
   );
 }
 
-export async function renderDocumentPdf(doc: LoadedDocument, logo: { data: Buffer; mime: string } | null) {
-  return renderToBuffer(<DocumentPdf doc={doc} logo={logo} />);
+export async function renderDocumentPdf(doc: LoadedDocument, logo: { data: Buffer; mime: string } | null, extra: PdfExtraSection[] = []) {
+  return renderToBuffer(<DocumentPdf doc={doc} logo={logo} extra={extra} />);
 }

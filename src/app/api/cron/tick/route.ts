@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { db } from "@/lib/db";
 import { deliverPending } from "@/lib/events/outbox";
 
 /**
@@ -14,7 +15,10 @@ async function handle(request: Request) {
   if (!same(given, process.env.CRON_SECRET) && !same(given, process.env.MYGST_INTERNAL_CRON_TOKEN)) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
-  return Response.json({ events: await deliverPending({ limit: 100 }) });
+  const events = await deliverPending({ limit: 100 });
+  // Housekeeping (cheap, indexed): plugin logs older than 30 days.
+  const pruned = await db.pluginLog.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 864e5) } } }).catch(() => ({ count: 0 }));
+  return Response.json({ events, pluginLogsPruned: pruned.count });
 }
 
 export const GET = handle;
