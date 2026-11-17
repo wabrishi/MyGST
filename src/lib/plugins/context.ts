@@ -1,9 +1,9 @@
 import "server-only";
 import type { Prisma } from "@/generated/prisma/client";
-import type { Role } from "@/generated/prisma/enums";
+import { BUILTIN_ROLE_ID, type BuiltinRoleKey as Role } from "../permissions";
 import { db } from "../db";
 import { absoluteUrl } from "../events/outbox";
-import type { CompanyContext } from "../tenant";
+import { memberGrants, ROLES_SELECT, type CompanyContext } from "../tenant";
 import { pluginLog } from "./log";
 import type { PluginManifest, PluginPermission } from "./manifest";
 import { safeFetch } from "./net";
@@ -70,11 +70,11 @@ export async function buildPluginContext(input: ContextInput): Promise<PluginCon
     const userId =
       input.user?.id ??
       input.actingUserId ??
-      (await db.membership.findFirst({ where: { companyId, role: "OWNER" }, orderBy: { createdAt: "asc" }, select: { userId: true } }))?.userId;
+      (await db.membership.findFirst({ where: { companyId, roles: { some: { roleId: BUILTIN_ROLE_ID.OWNER } } }, orderBy: { createdAt: "asc" }, select: { userId: true } }))?.userId;
     if (!userId) throw new Error("No owner to act as");
-    const m = await db.membership.findUnique({ where: { userId_companyId: { userId, companyId } }, include: { user: { select: { id: true, name: true, email: true } } } });
+    const m = await db.membership.findUnique({ where: { userId_companyId: { userId, companyId } }, include: { user: { select: { id: true, name: true, email: true } }, ...ROLES_SELECT } });
     if (!m) throw new Error("The acting user is no longer a member of this company");
-    return { user: m.user, companyId, role: m.role, company: { id: company.id, legalName: company.legalName, tradeName: company.tradeName, stateCode: company.stateCode, gstin: company.gstin } };
+    return { user: m.user, companyId, membershipId: m.id, ...memberGrants(m.roles), company: { id: company.id, legalName: company.legalName, tradeName: company.tradeName, stateCode: company.stateCode, gstin: company.gstin } };
   };
 
   const summary = (d: {

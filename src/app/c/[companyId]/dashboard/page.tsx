@@ -33,7 +33,7 @@ import { dashboardKpis } from "@/lib/reports/kpis";
 import { setupStatus } from "@/lib/setup";
 import { requireCompany } from "@/lib/tenant";
 import { PluginWidgets } from "../plugin-slots";
-import { ChartCard } from "./chart-card";
+import { ChartCard } from "@/components/chart-card";
 import { CashFlowChart, NetGstChart, SalesPurchasesChart } from "./charts";
 
 export const metadata = { title: "Dashboard" };
@@ -54,8 +54,8 @@ export default async function DashboardPage({ params, searchParams }: PageProps<
   const base = `/c/${ctx.companyId}`;
   const fy = await getSelectedFy(ctx.companyId);
   const [from, to] = fyRange(fy);
-  const financials = can(ctx.role, "reports.view");
-  const setup = can(ctx.role, "company.settings") ? await setupStatus(ctx.companyId) : null;
+  const financials = can(ctx, "reports.view");
+  const setup = can(ctx, "company.settings") ? await setupStatus(ctx.companyId) : null;
 
   const notices = (
     <div className="mb-6 flex flex-col gap-3 empty:hidden">
@@ -103,7 +103,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps<
   const QUICK = [
     { href: `${base}/invoices/new`, label: "New invoice", icon: FilePlus2 },
     { href: `${base}/quotations/new`, label: "New quotation", icon: ScrollText },
-    ...(can(ctx.role, "payments.write") ? [{ href: `${base}/payments/new`, label: "Record payment", icon: HandCoins }] : []),
+    ...(can(ctx, "payments.write") ? [{ href: `${base}/payments/new`, label: "Record payment", icon: HandCoins }] : []),
     { href: `${base}/parties/new`, label: "Add customer", icon: UserPlus },
     { href: `${base}/products/new`, label: "Add product", icon: PackagePlus },
   ];

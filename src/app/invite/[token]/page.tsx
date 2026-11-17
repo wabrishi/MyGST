@@ -5,7 +5,7 @@ import { Alert, ButtonLink, Card } from "@/components/ui";
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { userCompany } from "@/lib/one-company";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { roleNames } from "@/lib/permissions";
 import { AcceptButton } from "./accept-button";
 
 export const metadata = { title: "Invitation" };
@@ -19,6 +19,9 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
     where: { tokenHash: createHash("sha256").update(token).digest("hex") },
     include: { company: { select: { legalName: true, tradeName: true } } },
   });
+  const inviteRoles = invite
+    ? await db.companyRole.findMany({ where: { id: { in: Array.isArray(invite.roleIds) ? invite.roleIds.map(String) : [] } }, select: { name: true } })
+    : [];
 
   const current = await userCompany(user.id);
 
@@ -46,7 +49,7 @@ export default async function InvitePage({ params }: PageProps<"/invite/[token]"
       <>
         <p>
           You&apos;ve been invited to join <b>{invite.company.tradeName || invite.company.legalName}</b> as{" "}
-          <b>{ROLE_LABEL[invite.role]}</b>.
+          <b>{roleNames(inviteRoles)}</b>.
         </p>
         <AcceptButton token={token} />
       </>

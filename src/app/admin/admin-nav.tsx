@@ -3,31 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui";
+import { ADMIN_PAGES } from "@/lib/admin-permissions";
 
-const LINKS = [
-  { href: "/admin", label: "Companies", match: (p: string) => p === "/admin" || (p.startsWith("/admin/companies/") && p !== "/admin/companies/new") },
-  { href: "/admin/companies/new", label: "New company", match: (p: string) => p === "/admin/companies/new" },
-  { href: "/admin/plugins", label: "Plugins", match: (p: string) => p.startsWith("/admin/plugins") },
-  { href: "/admin/backups", label: "Backups", match: (p: string) => p.startsWith("/admin/backups") },
-];
-
-export function AdminNav() {
+export function AdminNav({ perms }: { perms: string[] }) {
   const pathname = usePathname();
+  const links = ADMIN_PAGES.filter((l) => perms.includes(l.perm));
   return (
-    <nav className="flex items-center gap-1 text-[13.5px]" aria-label="Admin">
-      {LINKS.map((l) => (
-        <Link
-          key={l.href}
-          href={l.href}
-          aria-current={l.match(pathname) ? "page" : undefined}
-          className={cn(
-            "rounded-lg px-3 py-1.5 font-medium transition-colors",
-            l.match(pathname) ? "bg-primary-soft text-primary" : "text-muted hover:bg-subtle hover:text-foreground",
-          )}
-        >
-          {l.label}
-        </Link>
-      ))}
+    <nav className="-mx-1 flex min-w-0 items-center gap-1 overflow-x-auto text-[13.5px]" aria-label="Admin">
+      {links.map((l) => {
+        const active = l.exact ? pathname === l.href : pathname === l.href || pathname.startsWith(l.href + "/");
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "shrink-0 rounded-lg px-3 py-1.5 font-medium transition-colors",
+              active ? "bg-primary-soft text-primary" : "text-muted hover:bg-subtle hover:text-foreground",
+            )}
+          >
+            {l.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }

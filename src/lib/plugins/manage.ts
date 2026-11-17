@@ -6,13 +6,15 @@ import { UserError } from "../action";
 import { generateApiKey } from "../api/keys";
 import { decryptSecret, encryptSecret } from "../backup/crypto";
 import { db } from "../db";
+import { BUILTIN_ROLE_ID } from "../permissions";
 import { newEventId } from "../events/signing";
 import { isPluginActive } from "./access";
 import { postSigned } from "./delivery";
 import { pluginLog } from "./log";
 import { newPermissions, parseManifest, semverGte, type PluginManifest } from "./manifest";
 import { safeFetch } from "./net";
-import { codePlugins } from "./registry";
+import { codePlugins, type CodePlugin } from "./registry";
+import { bundleSha256, codeFor, loadBundle } from "./uploaded";
 import { contextFor, manifestOf, type PluginEntry } from "./runner";
 import { prepareSettings } from "./settings";
 
@@ -29,8 +31,13 @@ const asJson = (v: unknown) => v as Prisma.InputJsonValue;
 /** Mirrors src/plugins into the Plugin table: new folders appear as NOT_INSTALLED, removed ones as MISSING. */
 export async function syncCodePlugins() {
   const { plugins, broken } = codePlugins();
-  const rows = await db.plugin.findMany({ where: { kind: "CODE" } });
+  const rows = await db.plugin.findMany({ where: { kind: "CODE" }, omit: { bundle: true } });
+  const others = new Set((await db.plugin.findMany({ where: { kind: { not: "CODE" } }, select: { id: true } })).map((r) => r.id));
   for (const p of plugins.values()) {
+    if (others.has(p.manifest.id)) {
+      broken.push({ folder: p.folder, error: `id "${p.manifest.id}" is already used by an uploaded or external plugin` });
+      continue;
+    }
     const row = rows.find((r) => r.id === p.manifest.id);
     const data = { name: p.manifest.name, version: p.manifest.version, manifest: asJson(p.manifest) };
     if (!row) await db.plugin.create({ data: { id: p.manifest.id, kind: "CODE", ...data } });
@@ -80,8 +87,8 @@ async function fireTransitions(pluginId: string, before: Snapshot) {
   const on = changes.length - off.length;
   await pluginLog(pluginId, null, "info", `Active in ${on} more and ${off.length} fewer compan${changes.length === 1 ? "y" : "ies"}`);
 
-  const plugin = await db.plugin.findUnique({ where: { id: pluginId } });
-  const code = plugin?.kind === "CODE" ? codePlugins().plugins.get(pluginId) : null;
+  const plugin = await db.plugin.findUnique({ where: { id: pluginId }, omit: { bundle: true } });
+  const code = plugin && plugin.kind !== "EXTERNAL" ? await codeFor(plugin) : null;
   const hasWork = plugin?.kind === "EXTERNAL" || !!code?.lifecycle.onEnable || !!code?.lifecycle.onDisable;
   if (!hasWork) return changes.length;
 
@@ -108,13 +115,13 @@ async function fireTransitions(pluginId: string, before: Snapshot) {
 }
 
 async function entryFor(pluginId: string, companyId: string): Promise<PluginEntry | null> {
-  const plugin = await db.plugin.findUnique({ where: { id: pluginId }, include: { companies: { where: { companyId } } } });
-  if (!plugin) return null;
+  const row = await db.plugin.findUnique({ where: { id: pluginId }, omit: { bundle: true }, include: { companies: { where: { companyId } } } });
+  if (!row) return null;
+  const { companies, ...plugin } = row;
   const manifest = manifestOf(plugin);
   if (!manifest) return null;
-  const { codePlugin } = await import("./registry");
-  const cp = plugin.companies[0] ?? null;
-  return { plugin, cp, manifest, code: plugin.kind === "CODE" ? codePlugin(plugin.id) : null, available: true, active: isPluginActive(plugin, cp) };
+  const cp = companies[0] ?? null;
+  return { plugin, cp, manifest, code: plugin.kind === "EXTERNAL" ? null : await codeFor(plugin), available: true, active: isPluginActive(plugin, cp) };
 }
 
 async function onActivated(pluginId: string, companyId: string) {
@@ -153,7 +160,7 @@ export async function externalInstallHandshake(e: PluginEntry, companyId: string
   const cp = await db.companyPlugin.findUniqueOrThrow({ where: { companyId_pluginId: { companyId, pluginId: e.plugin.id } } });
   const secret = `whsec_${randomBytes(24).toString("base64url")}`;
   const actingUserId =
-    cp.enabledBy ?? (await db.membership.findFirst({ where: { companyId, role: "OWNER" }, orderBy: { createdAt: "asc" }, select: { userId: true } }))?.userId;
+    cp.enabledBy ?? (await db.membership.findFirst({ where: { companyId, roles: { some: { roleId: BUILTIN_ROLE_ID.OWNER } } }, orderBy: { createdAt: "asc" }, select: { userId: true } }))?.userId;
   if (!actingUserId) throw new Error("No owner to issue the plugin's API key");
   if (cp.apiKeyId) await db.apiKey.updateMany({ where: { id: cp.apiKeyId, revokedAt: null }, data: { revokedAt: new Date() } });
   const key = generateApiKey();
@@ -192,7 +199,7 @@ export async function installPlugin(pluginId: string, opts: { availability: Plug
   const first = p.status !== "INSTALLED";
   await db.plugin.update({ where: { id: pluginId }, data: { status: "INSTALLED", availability: opts.availability, defaultEnabled: opts.defaultEnabled, installedAt: new Date(), installedBy: opts.by, lastError: null } });
   if (first) {
-    const code = p.kind === "CODE" ? codePlugins().plugins.get(pluginId) : null;
+    const code = p.kind === "EXTERNAL" ? null : await codeFor(p);
     try {
       await code?.lifecycle.onInstall?.();
     } catch (e) {
@@ -228,16 +235,16 @@ export async function uninstallPlugin(pluginId: string, opts: { keepData: boolea
   const before = await activeSnapshot(pluginId);
   await db.plugin.update({ where: { id: pluginId }, data: { availability: "NONE" } });
   await fireTransitions(pluginId, before);
-  if (p.kind === "CODE") {
+  if (p.kind !== "EXTERNAL") {
     try {
-      await codePlugins().plugins.get(pluginId)?.lifecycle.onUninstall?.();
+      await (await codeFor(p))?.lifecycle.onUninstall?.();
     } catch (e) {
       await pluginLog(pluginId, null, "error", `onUninstall: ${(e as Error).message}`);
     }
   }
   await db.apiKey.updateMany({ where: { pluginId, revokedAt: null }, data: { revokedAt: new Date() } });
-  if (p.kind === "EXTERNAL") {
-    await db.plugin.delete({ where: { id: pluginId } }); // cascades settings, data, logs
+  if (p.kind === "EXTERNAL" || p.kind === "UPLOADED") {
+    await db.plugin.delete({ where: { id: pluginId } }); // cascades settings, data, logs (and the uploaded bundle)
     return;
   }
   if (!opts.keepData) {
@@ -272,12 +279,68 @@ export async function fetchExternalManifest(url: string): Promise<PluginManifest
 export async function addExternalPlugin(url: string) {
   const manifest = await fetchExternalManifest(url);
   const existing = await db.plugin.findUnique({ where: { id: manifest.id } });
-  if (existing && existing.kind === "CODE") throw new UserError(`A built-in plugin already uses the id "${manifest.id}"`);
+  if (existing && existing.kind !== "EXTERNAL") throw new UserError(`A ${existing.kind === "CODE" ? "built-in" : "uploaded"} plugin already uses the id "${manifest.id}"`);
   if (existing && existing.manifestUrl !== url) throw new UserError(`Another external plugin already uses the id "${manifest.id}"`);
   const data = { name: manifest.name, version: manifest.version, manifest: asJson(manifest), manifestUrl: url, lastError: null };
   if (existing) await db.plugin.update({ where: { id: manifest.id }, data });
   else await db.plugin.create({ data: { id: manifest.id, kind: "EXTERNAL", ...data } });
   return { id: manifest.id, permissionsAdded: existing ? newPermissions(manifestOf(existing)?.permissions, manifest.permissions) : [] };
+}
+
+// ───────────────────────── Uploaded plugins ─────────────────────────
+
+export interface UploadPreview {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  permissions: string[];
+  sha256: string;
+  sizeBytes: number;
+  existingVersion: string | null;
+  permissionsAdded: string[];
+  downgrade: boolean;
+}
+
+/** Validates a packed bundle without saving it (what the admin confirms before uploading). */
+export async function previewUpload(code: string): Promise<UploadPreview> {
+  let p: CodePlugin;
+  try {
+    p = loadBundle(code);
+  } catch (e) {
+    throw new UserError(`This isn't a valid plugin bundle: ${(e as Error).message}`);
+  }
+  const m = p.manifest;
+  const existing = await db.plugin.findUnique({ where: { id: m.id }, omit: { bundle: true } });
+  if (existing && existing.kind !== "UPLOADED") throw new UserError(`A ${existing.kind === "CODE" ? "built-in" : "external"} plugin already uses the id "${m.id}"`);
+  return {
+    id: m.id,
+    name: m.name,
+    version: m.version,
+    description: m.description ?? "",
+    author: m.author ?? "",
+    permissions: m.permissions,
+    sha256: bundleSha256(code),
+    sizeBytes: Buffer.byteLength(code, "utf8"),
+    existingVersion: existing?.version ?? null,
+    permissionsAdded: existing ? newPermissions(manifestOf(existing)?.permissions, m.permissions) : [],
+    downgrade: !!existing && !semverGte(m.version, existing.version),
+  };
+}
+
+/** Saves an uploaded bundle (new plugin, or an upgrade of an uploaded one). Installing is a separate step. */
+export async function saveUpload(code: string, opts: { by: string; expectSha256: string; allowDowngrade: boolean }) {
+  const preview = await previewUpload(code);
+  if (preview.sha256 !== opts.expectSha256) throw new UserError("The file changed after the preview. Choose it again.");
+  if (preview.downgrade && !opts.allowDowngrade) throw new UserError(`Version ${preview.version} is older than the installed ${preview.existingVersion}. Tick "allow downgrade" to replace it.`);
+  const manifest = loadBundle(code).manifest;
+  const data = { name: manifest.name, version: manifest.version, manifest: asJson(manifest), bundle: code, bundleSha256: preview.sha256, uploadedBy: opts.by, lastError: null };
+  const existing = await db.plugin.findUnique({ where: { id: manifest.id }, select: { id: true } });
+  if (existing) await db.plugin.update({ where: { id: manifest.id }, data });
+  else await db.plugin.create({ data: { id: manifest.id, kind: "UPLOADED", ...data } });
+  await pluginLog(manifest.id, null, "info", `${existing ? "Updated to" : "Uploaded"} v${manifest.version} by ${opts.by} (sha256 ${preview.sha256.slice(0, 12)}…)`);
+  return preview;
 }
 
 // ───────────────────────── Owner ─────────────────────────

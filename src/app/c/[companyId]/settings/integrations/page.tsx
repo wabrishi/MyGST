@@ -15,7 +15,7 @@ const STATUS: Record<string, ["green" | "amber" | "red" | "gray", string]> = {
 
 export default async function IntegrationsPage({ params }: PageProps<"/c/[companyId]/settings/integrations">) {
   const { companyId } = await params;
-  const ctx = await requireCompanyPage(companyId, "company.settings");
+  const ctx = await requireCompanyPage(companyId, "settings.integrations");
   const [integration, events, dead] = await Promise.all([
     db.companyIntegration.findUnique({ where: { companyId: ctx.companyId }, select: { leadsWebhookUrl: true, enabled: true } }),
     db.outboxEvent.findMany({ where: { companyId: ctx.companyId, pluginId: null }, orderBy: { createdAt: "desc" }, take: 20 }),

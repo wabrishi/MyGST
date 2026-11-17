@@ -31,13 +31,13 @@ This guide covers how to build, test and ship one.
 
 |                 | **Code plugin** | **External plugin** |
 |-----------------|-----------------|---------------------|
-| Lives in        | `src/plugins/<id>/` in this repo | Your own server, any language |
-| Installed by    | Merging and deploying, then **Admin → Plugins → Install** | **Admin → Plugins → Add an external plugin** (manifest URL), then Install |
+| Lives in        | `src/plugins/<id>/` in this repo, or **uploaded** as a packed file | Your own server, any language |
+| Installed by    | Deploying (or **Admin → Plugins → Upload a plugin**), then **Install** | **Admin → Plugins → Add an external plugin** (manifest URL), then Install |
 | Can do          | Everything in this guide | Events, the `document.validate` hook, pages and widgets shown in a frame, the `/api/v1` API |
 | Talks to MyGST  | In-process, through the SDK (`@/lib/plugins/sdk`) | Signed HTTP calls in both directions |
 | Good for        | Features that change how MyGST works | Integrations with other systems, and work by third parties |
 
-Uploading code (zip files) is deliberately not supported. On a server shared by many companies, an uploaded plugin could read every company's data, and Hostinger replaces uploaded files on every deploy.
+A code plugin can reach MyGST in two ways: merged into this repo and deployed, or **packed and uploaded** by an admin (see [Package & upload](#package--upload)). Uploaded code is trusted code, like a WordPress plugin: it runs inside MyGST.
 
 ### Who switches what
 
@@ -487,11 +487,36 @@ Use `Authorization: Bearer <apiKey>` against `apiBaseUrl`. The key only works fo
 
 ---
 
+## Package & upload
+
+Admins can add a code plugin without a deploy:
+
+1. Build and test it as usual in `src/plugins/<id>/`.
+2. Pack it:
+   ```bash
+   npm run plugin:pack -- <id>                 # → dist-plugins/<id>-<version>.mygst-plugin.js
+   npm run plugin:pack -- <id> --id <new-id>   # same code under another id (e.g. to test next to the built-in copy)
+   ```
+   The packer bundles your folder and its npm dependencies into one CommonJS file and prints its **SHA-256**. Publish that checksum with the file.
+   `react`, `react/jsx-runtime` and `@/lib/plugins/sdk` are left out: MyGST provides them. Importing anything else from MyGST (`@/…`) fails the pack.
+3. In **Admin → Plugins → Upload a plugin** (needs the *plugins.upload* admin permission), choose the file and click **Check file**. MyGST validates the manifest and shows the id, version, permissions and checksum. Confirm with **Upload plugin**.
+4. Install it like any other plugin.
+
+**How uploaded plugins are stored and run**
+- The file is stored in the database (max 2 MB), so redeploys keep it. It's compiled once per server process and cached by its checksum.
+- At load time it may `require` only `react`, `react/jsx-runtime`, `node:crypto` and the SDK. Everything else must be bundled.
+- **Trust model:** the code runs inside MyGST with the server's full access. The manifest permissions limit what `ctx.data` allows, not what the code could do. Only upload plugins you wrote or reviewed, and compare the checksum. The upload, its checksum and the admin who did it are written to the audit log.
+- **Updating:** upload a newer version of the same id. It replaces the code in place, keeping installs, settings and data. An older version is refused unless *allow downgrade* is ticked. If the new version asks for more permissions, owners are asked to accept them again.
+- **Removing:** uninstalling an uploaded plugin deletes its code, settings and data.
+- An id already used by a built-in or external plugin can't be uploaded.
+
+---
+
 ## Versioning, upgrades and uninstalling
 
 **Versioning and upgrades**
 - Use semver. Bump the **minor** version for new features and the **major** version for breaking changes to your settings or data.
-- Code plugins update with the deploy. External plugins update when the admin reloads the manifest.
+- Code plugins update with the deploy, uploaded ones when a newer file is uploaded. External plugins update when the admin reloads the manifest.
 - Don't rename setting keys. Add new ones and keep reading the old ones.
 
 **Uninstalling and admin controls**

@@ -19,7 +19,7 @@ export default async function EditPartyPage({ params }: PageProps<"/c/[companyId
         title={p.name}
         subtitle={p.active ? undefined : "Inactive"}
         actions={
-          can(ctx.role, "reports.view") && (
+          can(ctx, "reports.view") && (
             <ButtonLink variant="secondary" href={`/c/${ctx.companyId}/reports/ledger?party=${p.id}`}>
               View ledger
             </ButtonLink>
@@ -30,7 +30,7 @@ export default async function EditPartyPage({ params }: PageProps<"/c/[companyId
         <PartyForm
           companyId={ctx.companyId}
           id={p.id}
-          canDelete={can(ctx.role, "masters.delete")}
+          canDelete={can(ctx, "masters.delete")}
           initial={{
             type: p.type,
             name: p.name,

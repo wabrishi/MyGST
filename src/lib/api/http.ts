@@ -4,7 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { UserError } from "../action";
 import { db } from "../db";
 import { hashApiKey, looksLikeApiKey } from "./keys";
-import type { CompanyContext } from "../tenant";
+import { memberGrants, ROLES_SELECT, type CompanyContext } from "../tenant";
 
 /** JSON response helpers for /api/v1 — errors are always `{ "error": "message" }`. */
 export const json = (body: unknown, status = 200) =>
@@ -36,7 +36,7 @@ export async function authenticate(request: Request): Promise<CompanyContext & {
 
   const member = await db.membership.findUnique({
     where: { userId_companyId: { userId: row.createdById, companyId: row.companyId } },
-    select: { role: true, user: { select: { id: true, name: true, email: true } } },
+    select: { id: true, ...ROLES_SELECT, user: { select: { id: true, name: true, email: true } } },
   });
   if (!member) throw new ApiError("The user who created this API key no longer has access; create a new key", 401);
 
@@ -47,7 +47,7 @@ export async function authenticate(request: Request): Promise<CompanyContext & {
   const { suspendedAt: _s, ...company } = row.company;
   void _s;
   const scopes = Array.isArray(row.scopes) ? row.scopes.map(String) : null;
-  return { user: member.user, companyId: company.id, role: member.role, company, apiKeyId: row.id, scopes, pluginId: row.pluginId };
+  return { user: member.user, companyId: company.id, membershipId: member.id, ...memberGrants(member.roles), company, apiKeyId: row.id, scopes, pluginId: row.pluginId };
 }
 
 export async function readJson(request: Request): Promise<unknown> {

@@ -51,3 +51,6 @@ next-env.d.ts
 
 # example external plugin state
 /examples/external-plugin/data.json
+
+# packed plugin bundles (npm run plugin:pack)
+/dist-plugins/

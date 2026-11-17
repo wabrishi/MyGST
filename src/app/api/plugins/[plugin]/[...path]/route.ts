@@ -1,8 +1,10 @@
 import { getSessionUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canUseApp } from "@/lib/permissions";
+import { memberGrants, ROLES_SELECT } from "@/lib/tenant";
 import { pluginLog } from "@/lib/plugins/log";
 import { activeEntries, contextFor, type PluginEntry } from "@/lib/plugins/runner";
-import { codePlugin } from "@/lib/plugins/registry";
+import { codeFor } from "@/lib/plugins/uploaded";
 
 /**
  * HTTP routes registered by code plugins with api.route(): /api/plugins/<plugin>/<path>
@@ -13,7 +15,8 @@ import { codePlugin } from "@/lib/plugins/registry";
  */
 async function dispatch(request: Request, { params }: RouteContext<"/api/plugins/[plugin]/[...path]">) {
   const { plugin, path } = await params;
-  const code = codePlugin(plugin);
+  const row = await db.plugin.findUnique({ where: { id: plugin }, select: { id: true, kind: true, bundleSha256: true } });
+  const code = row && row.kind !== "EXTERNAL" ? await codeFor(row) : null;
   if (!code) return Response.json({ error: "Not found" }, { status: 404 });
   const joined = path.join("/");
   const route = code.routes.find((r) => r.method === request.method && (r.path === joined || (r.path.endsWith("/*") && joined.startsWith(r.path.slice(0, -1)))));
@@ -30,12 +33,13 @@ async function dispatch(request: Request, { params }: RouteContext<"/api/plugins
     const user = await getSessionUser();
     if (!user) return Response.json({ error: "Sign in required" }, { status: 401 });
     const companyId = new URL(request.url).searchParams.get("companyId") ?? "";
-    const m = companyId ? await db.membership.findUnique({ where: { userId_companyId: { userId: user.id, companyId } }, include: { company: { select: { suspendedAt: true } } } }) : null;
+    const m = companyId ? await db.membership.findUnique({ where: { userId_companyId: { userId: user.id, companyId } }, include: { company: { select: { suspendedAt: true } }, ...ROLES_SELECT } }) : null;
     if (!m || m.company.suspendedAt) return Response.json({ error: "Not found" }, { status: 404 });
-    if (route.roles && !route.roles.includes(m.role)) return Response.json({ error: "Forbidden" }, { status: 403 });
+    const grants = memberGrants(m.roles);
+    if (route.roles && !canUseApp(grants, plugin, route.roles)) return Response.json({ error: "Forbidden" }, { status: 403 });
     const e = await findEntry(companyId);
     if (!e) return Response.json({ error: "Plugin is not active for this company" }, { status: 404 });
-    ctx = await contextFor(e, companyId, user, m.role);
+    ctx = await contextFor(e, companyId, user, grants.role);
   }
 
   try {

@@ -163,7 +163,8 @@ test("payments, purchases/ITC, reports, FY lock, roles and tenant isolation", as
     await page.goto(`${base}/settings/users`);
     await settled(page);
     await page.getByLabel("Email").fill(otherEmail);
-    await page.getByRole("combobox", { name: "Role" }).selectOption("STAFF");
+    // Staff is preselected in the role picker.
+    await expect(page.getByRole("group", { name: "Invite roles" }).getByRole("checkbox", { name: /Staff/ })).toHaveAttribute("aria-checked", "true");
     await page.getByRole("button", { name: "Send invite" }).click();
     await expect(page.getByText(/already belongs to another company/)).toBeVisible();
   });

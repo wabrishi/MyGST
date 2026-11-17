@@ -51,7 +51,7 @@ test("super-admin creates a company; owner completes the setup wizard", async ({
     await expect(page.getByText("Setup pending")).toBeVisible();
     await expect(page.getByRole("row", { name: new RegExp(ownerEmail) })).toContainText("Pending invite");
 
-    await page.goto(`/admin?q=${encodeURIComponent(companyName)}`);
+    await page.goto(`/admin/companies?q=${encodeURIComponent(companyName)}`);
     await expect(page.getByRole("link", { name: companyName })).toBeVisible();
   });
 

@@ -3,24 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui";
+import { SETTINGS_TABS } from "./tab-list";
 
-const TABS = [
-  ["company", "Company"],
-  ["users", "Users"],
-  ["numbering", "Numbering"],
-  ["financial-years", "Financial years"],
-  ["backup", "Backup"],
-  ["api-keys", "API keys"],
-  ["integrations", "Integrations"],
-  ["plugins", "Plugins"],
-  ["/setup", "Setup wizard"],
-] as const;
-
-export function SettingsTabs({ companyId }: { companyId: string }) {
+export function SettingsTabs({ companyId, perms }: { companyId: string; perms: string[] }) {
   const pathname = usePathname();
   return (
     <div className="mb-5 flex flex-wrap gap-1 border-b border-border">
-      {TABS.map(([slug, label]) => {
+      {SETTINGS_TABS.filter(([, , perm]) => perms.includes(perm)).map(([slug, label]) => {
         // Entries starting with "/" live outside /settings (e.g. the setup wizard).
         const href = slug.startsWith("/") ? `/c/${companyId}${slug}` : `/c/${companyId}/settings/${slug}`;
         return (

@@ -12,7 +12,7 @@ export const metadata = { title: "Plugins" };
 
 export default async function CompanyPluginsPage({ params }: PageProps<"/c/[companyId]/settings/plugins">) {
   const { companyId } = await params;
-  const ctx = await requireCompanyPage(companyId, "company.settings");
+  const ctx = await requireCompanyPage(companyId, "settings.plugins");
   const entries = (await pluginEntries(ctx.companyId)).filter((e) => e.available);
   const errors = await recentPluginErrors(ctx.companyId);
 

@@ -1,117 +1,127 @@
-import { Building2 } from "lucide-react";
+import { Building2, FileText, IndianRupee, Users } from "lucide-react";
 import Link from "next/link";
-import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
-import { SearchBox } from "@/components/search-box";
-import { Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th } from "@/components/ui";
-import type { Prisma } from "@/generated/prisma/client";
-import { db } from "@/lib/db";
-import { stateName } from "@/lib/gst/states";
+import { redirect } from "next/navigation";
+import { ChartCard } from "@/components/chart-card";
+import { Alert, Card, CardHeader, PageHeader, StatCard } from "@/components/ui";
+import { ADMIN_PAGES } from "@/lib/admin-permissions";
+import { adminCan, requireAdmin } from "@/lib/admin";
+import { platformOverview } from "@/lib/admin-stats";
+import { formatINR } from "@/lib/gst/calc";
+import { ColumnTrend } from "./admin-charts";
 
-export const metadata = { title: "Companies" };
+export const metadata = { title: "Overview" };
 
-const FILTERS = [
-  ["", "All"],
-  ["setup", "Setup pending"],
-  ["active", "Active"],
-  ["suspended", "Suspended"],
-] as const;
+const n = new Intl.NumberFormat("en-IN");
+/** formatINR takes paise; these figures are rupees. */
+const rupees = (v: number) => formatINR(Math.round(v * 100));
 
-export default async function AdminCompaniesPage({ searchParams }: PageProps<"/admin">) {
-  const sp = await searchParams;
-  const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const filter = typeof sp.status === "string" ? sp.status : "";
-  const page = pageFrom(sp);
+export default async function AdminOverviewPage() {
+  const admin = await requireAdmin();
+  // Admins without the dashboard go to the first page they may open.
+  if (!adminCan(admin, "admin.dashboard")) redirect(ADMIN_PAGES.find((p) => admin.permissions.has(p.perm))?.href ?? "/companies");
 
-  const where: Prisma.CompanyWhereInput = {
-    ...(q && { OR: [{ legalName: { contains: q } }, { tradeName: { contains: q } }, { gstin: { contains: q } }, { memberships: { some: { user: { email: { contains: q } } } } }] }),
-    ...(filter === "setup" && { setupCompletedAt: null, suspendedAt: null }),
-    ...(filter === "active" && { suspendedAt: null }),
-    ...(filter === "suspended" && { suspendedAt: { not: null } }),
-  };
-
-  const [rows, total, suspended, pending] = await Promise.all([
-    db.company.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE + 1,
-      select: {
-        id: true,
-        legalName: true,
-        tradeName: true,
-        gstin: true,
-        stateCode: true,
-        createdAt: true,
-        createdVia: true,
-        setupCompletedAt: true,
-        suspendedAt: true,
-        memberships: { where: { role: "OWNER" }, select: { user: { select: { email: true } } } },
-        invitations: { where: { acceptedAt: null, role: "OWNER" }, select: { email: true } },
-        _count: { select: { memberships: true, documents: true } },
-      },
-    }),
-    db.company.count(),
-    db.company.count({ where: { suspendedAt: { not: null } } }),
-    db.company.count({ where: { setupCompletedAt: null, suspendedAt: null } }),
-  ]);
+  const s = await platformOverview();
+  const fy = `FY ${s.fyStart.slice(2, 4)}-${String(Number(s.fyStart.slice(2, 4)) + 1).padStart(2, "0")}`;
+  const maxTop = Math.max(1, ...s.topCompanies.map((c) => c.value));
+  const showSystem = adminCan(admin, "system.view");
 
   return (
     <>
-      <PageHeader
-        title="Companies"
-        subtitle={`${total} total · ${pending} with setup pending · ${suspended} suspended`}
-        actions={<ButtonLink href="/admin/companies/new">+ New company</ButtonLink>}
-      />
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <SearchBox placeholder="Search name, GSTIN, owner email" />
-        <FilterPills active={filter} items={FILTERS.map(([v, l]) => ({ value: v, label: l, href: v ? `/admin?status=${v}` : "/admin" }))} />
+      <PageHeader title="Overview" subtitle={`Platform activity across all companies · ${s.today}`} />
+
+      {showSystem && (s.attention.deadEvents > 0 || s.attention.pluginErrors > 0) && (
+        <div className="mb-5">
+          <Alert kind="warning">
+            <span className="inline-flex flex-wrap items-center gap-1">
+              {s.attention.deadEvents > 0 && <span>{n.format(s.attention.deadEvents)} event deliveries failed.</span>}
+              {s.attention.pluginErrors > 0 && <span>{n.format(s.attention.pluginErrors)} plugin errors in the last 24 hours.</span>}
+              <Link href="/admin/system" className="font-semibold underline underline-offset-2">
+                Open system health
+              </Link>
+            </span>
+          </Alert>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Companies"
+          value={n.format(s.companies.total)}
+          icon={Building2}
+          hint={`${n.format(s.companies.active)} active · ${n.format(s.companies.setupPending)} setup pending · ${n.format(s.companies.suspended)} suspended`}
+        />
+        <StatCard
+          label="Users"
+          value={n.format(s.users.total)}
+          icon={Users}
+          tone="green"
+          hint={`${n.format(s.users.newThisWeek)} new this week${s.users.disabled ? ` · ${n.format(s.users.disabled)} disabled` : ""}`}
+        />
+        <StatCard
+          label="Invoices this month"
+          value={n.format(s.invoices.month.count)}
+          icon={FileText}
+          tone="amber"
+          hint={`${rupees(s.invoices.month.value)} invoiced (incl. GST)`}
+        />
+        <StatCard label={`Sales ${fy}`} value={rupees(s.invoices.fy.value)} icon={IndianRupee} hint={`${n.format(s.invoices.fy.count)} invoices · ${n.format(s.pluginsInstalled)} plugins installed`} />
       </div>
-      <Card>
-        {rows.length === 0 ? (
-          <Empty icon={Building2} title="No companies found">Try a different search or filter.</Empty>
-        ) : (
-          <Table>
-            <thead>
-              <tr>
-                <Th>Company</Th>
-                <Th>GSTIN</Th>
-                <Th>Owner</Th>
-                <Th className="text-right">Users</Th>
-                <Th className="text-right">Documents</Th>
-                <Th>Status</Th>
-                <Th>Created</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.slice(0, PAGE_SIZE).map((c) => (
-                <tr key={c.id} className="hover:bg-background">
-                  <Td>
-                    <Link href={`/admin/companies/${c.id}`} className="font-medium text-primary hover:underline">
-                      {c.tradeName || c.legalName}
-                    </Link>
-                    <div className="text-xs text-muted">{stateName(c.stateCode)}</div>
-                  </Td>
-                  <Td className="font-mono text-xs">{c.gstin || "—"}</Td>
-                  <Td className="text-xs">
-                    {c.memberships.map((m) => m.user.email).join(", ") ||
-                      (c.invitations.length ? <span className="text-muted">Invited: {c.invitations.map((i) => i.email).join(", ")}</span> : <span className="text-danger">No owner</span>)}
-                  </Td>
-                  <Td className="text-right">{c._count.memberships}</Td>
-                  <Td className="text-right">{c._count.documents}</Td>
-                  <Td>
-                    {c.suspendedAt ? <Badge color="red">Suspended</Badge> : c.setupCompletedAt ? <Badge color="green">Active</Badge> : <Badge color="amber">Setup pending</Badge>}
-                  </Td>
-                  <Td className="text-xs text-muted">
-                    {c.createdAt.toISOString().slice(0, 10)}
-                    {c.createdVia === "ADMIN" && " · by admin"}
-                  </Td>
-                </tr>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <ChartCard
+          title="Invoices issued"
+          description="Per month, last 12 months (cancelled excluded)"
+          table={{ columns: ["Month", "Invoices"], rows: s.invoicesPerMonth.map((p) => [p.label, n.format(p.value)]) }}
+        >
+          <ColumnTrend data={s.invoicesPerMonth} name="invoices" label="Invoices issued per month, last 12 months" />
+        </ChartCard>
+        <ChartCard
+          title="Sales value"
+          description="Invoiced amount incl. GST per month, last 12 months"
+          table={{ columns: ["Month", "Sales"], rows: s.salesPerMonth.map((p) => [p.label, rupees(p.value)]) }}
+        >
+          <ColumnTrend data={s.salesPerMonth} name="sales" money label="Sales value per month, last 12 months" />
+        </ChartCard>
+        <ChartCard
+          title="New sign-ups"
+          description="Users per week, last 12 weeks"
+          table={{ columns: ["Week of", "Sign-ups"], rows: s.signupsPerWeek.map((p) => [p.label, n.format(p.value)]) }}
+        >
+          <ColumnTrend data={s.signupsPerWeek} name="sign-ups" label="New user sign-ups per week, last 12 weeks" />
+        </ChartCard>
+        <Card>
+          <CardHeader title="Top companies" description={`By sales, ${fy}`} />
+          {s.topCompanies.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-muted">No invoices this year yet.</p>
+          ) : (
+            <ol className="flex flex-col gap-3.5 px-5 py-4">
+              {s.topCompanies.map((c, i) => (
+                <li key={c.id}>
+                  <div className="mb-1 flex items-baseline justify-between gap-3 text-[13px]">
+                    <span className="flex min-w-0 items-baseline gap-2">
+                      <span className="w-4 shrink-0 text-xs text-muted">{i + 1}</span>
+                      {adminCan(admin, "companies.view") ? (
+                        <Link href={`/admin/companies/${c.id}`} className="truncate font-medium hover:text-primary">
+                          {c.name}
+                        </Link>
+                      ) : (
+                        <span className="truncate font-medium">{c.name}</span>
+                      )}
+                      <span className="hidden shrink-0 text-xs text-muted sm:inline">
+                        {n.format(c.invoices)} {c.invoices === 1 ? "invoice" : "invoices"}
+                      </span>
+                    </span>
+                    <span className="tabular shrink-0 font-medium">{rupees(c.value)}</span>
+                  </div>
+                  <div className="ml-6 h-1.5 overflow-hidden rounded-full bg-subtle" aria-hidden>
+                    <div className="h-full rounded-full bg-[var(--series-1)]" style={{ width: `${Math.max(2, (c.value / maxTop) * 100)}%` }} />
+                  </div>
+                </li>
               ))}
-            </tbody>
-          </Table>
-        )}
-        <Pager page={page} hasMore={rows.length > PAGE_SIZE} basePath="/admin" searchParams={sp} />
-      </Card>
+            </ol>
+          )}
+        </Card>
+      </div>
     </>
   );
 }

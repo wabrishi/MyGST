@@ -79,7 +79,7 @@ export type SellerSnapshot = ReturnType<typeof sellerSnapshot>;
 /** Whether this user may edit the given document. */
 export function canEditDoc(ctx: CompanyContext, doc: { createdById: string; createdAt: Date; status: string; type: DocType }) {
   if (doc.status === "CANCELLED" || doc.status === "CONVERTED") return false;
-  if (can(ctx.role, "docs.editAny")) return true;
+  if (can(ctx, "docs.editAny")) return true;
   // Staff: only their own documents, and only on the day they were created (IST).
   return doc.createdById === ctx.user.id && todayIST(doc.createdAt) === todayIST();
 }

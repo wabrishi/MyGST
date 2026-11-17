@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
-import { Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
+import { adminCan, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { STATE_LABEL, companyPluginState, type CompanyPluginState } from "@/lib/plugins/access";
 import { PLUGIN_EVENTS, PLUGIN_PERMISSIONS, type PluginEvent, type PluginPermission } from "@/lib/plugins/manifest";
 import { manifestOf } from "@/lib/plugins/runner";
+import { codeFor, uploadedLoadError } from "@/lib/plugins/uploaded";
 import { AvailabilityForm, CompanyAccessToggle, InstallPanel, UninstallButton } from "../plugins-client";
 
 export const metadata = { title: "Plugin" };
@@ -20,12 +22,15 @@ const STATE_COLOR: Record<CompanyPluginState, "green" | "gray" | "amber" | "red"
 };
 
 export default async function AdminPluginPage({ params, searchParams }: PageProps<"/admin/plugins/[pluginId]">) {
+  const admin = await requireAdmin("plugins.manage");
   const { pluginId } = await params;
   const sp = await searchParams;
   const q = typeof sp.q === "string" ? sp.q.trim() : "";
-  const plugin = await db.plugin.findUnique({ where: { id: pluginId } });
+  const plugin = await db.plugin.findUnique({ where: { id: pluginId }, omit: { bundle: true } });
   if (!plugin) notFound();
   const manifest = manifestOf(plugin);
+  // Loads (and caches) an uploaded bundle so a broken one is reported here.
+  const uploadError = plugin.kind === "UPLOADED" ? ((await codeFor(plugin)) ? null : (uploadedLoadError(plugin.id, plugin.bundleSha256) ?? "the bundle is missing")) : null;
   const [companies, cps, logs] = await Promise.all([
     db.company.findMany({
       where: q ? { OR: [{ legalName: { contains: q } }, { tradeName: { contains: q } }, { gstin: { contains: q } }] } : undefined,
@@ -51,12 +56,35 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             {installed ? <Badge color="green">Installed</Badge> : plugin.status === "MISSING" ? <Badge color="red">Missing</Badge> : <Badge>Not installed</Badge>}
-            {plugin.id} · v{plugin.version} · {plugin.kind === "CODE" ? "Built-in (src/plugins)" : "External"}
+            {plugin.id} · v{plugin.version} · {plugin.kind === "CODE" ? "Built-in (src/plugins)" : plugin.kind === "UPLOADED" ? "Uploaded" : "External"}
             {manifest?.author && ` · by ${manifest.author}`}
           </span>
         }
-        actions={plugin.status !== "NOT_INSTALLED" || plugin.kind === "EXTERNAL" ? <UninstallButton pluginId={plugin.id} kind={plugin.kind} /> : undefined}
+        actions={plugin.status !== "NOT_INSTALLED" || plugin.kind !== "CODE" ? <UninstallButton pluginId={plugin.id} kind={plugin.kind} /> : undefined}
       />
+
+      {uploadError && (
+        <div className="mb-4">
+          <Alert>This uploaded plugin failed to load and is switched off everywhere: {uploadError}</Alert>
+        </div>
+      )}
+      {plugin.kind === "UPLOADED" && (
+        <Card className="mb-4 p-4 text-sm">
+          <h2 className="mb-1 font-semibold">Uploaded code</h2>
+          <p className="text-xs text-muted">
+            Uploaded by {plugin.uploadedBy ?? "unknown"} · last change {plugin.updatedAt.toISOString().slice(0, 10)}
+          </p>
+          <p className="mt-1 break-all font-mono text-[11px] text-muted">SHA-256 {plugin.bundleSha256}</p>
+          <p className="mt-2 text-xs">
+            {adminCan(admin, "plugins.upload") && (
+              <a href={`/admin/plugins/${plugin.id}/bundle`} className="font-medium text-primary hover:underline">
+                Download bundle
+              </a>
+            )}
+            <span className="text-muted"> · To update it, upload a newer version on the Plugins page.</span>
+          </p>
+        </Card>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="flex flex-col gap-4">

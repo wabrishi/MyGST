@@ -31,10 +31,10 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui";
-import type { Role } from "@/generated/prisma/enums";
-import { can, type Permission } from "@/lib/permissions";
+import { SETTINGS_PERMISSIONS, type Permission } from "@/lib/permissions";
 
-type Item = { href: string; label: string; icon: LucideIcon; perm?: Permission };
+/** `perm`: shown when the member holds it (or any of them, for a list). */
+type Item = { href: string; label: string; icon: LucideIcon; perm?: Permission | Permission[] };
 
 /** Icons plugins may name in their manifest (anything else shows the puzzle piece). */
 const PLUGIN_ICONS: Record<string, LucideIcon> = {
@@ -53,7 +53,7 @@ const SECTIONS: Array<{ title?: string; items: Item[] }> = [
       { href: "quotations", label: "Quotations", icon: ScrollText },
       { href: "credit-notes", label: "Credit notes", icon: FileMinus },
       { href: "debit-notes", label: "Debit notes", icon: FilePlus },
-      { href: "payments", label: "Payments", icon: ReceiptIndianRupee, perm: "payments.write" },
+      { href: "payments", label: "Payments", icon: ReceiptIndianRupee, perm: "payments.view" },
     ],
   },
   { title: "Purchases", items: [{ href: "purchases", label: "Purchases", icon: ShoppingCart, perm: "purchases.view" }] },
@@ -68,17 +68,17 @@ const SECTIONS: Array<{ title?: string; items: Item[] }> = [
     title: "Insights",
     items: [
       { href: "reports", label: "Reports", icon: BarChart3, perm: "reports.view" },
-      { href: "settings", label: "Settings", icon: Settings, perm: "company.settings" },
+      { href: "settings", label: "Settings", icon: Settings, perm: SETTINGS_PERMISSIONS },
     ],
   },
 ];
 
-export function SideNav({ companyId, role, apps = [], onNavigate }: { companyId: string; role: Role; apps?: AppNavItem[]; onNavigate?: () => void }) {
+export function SideNav({ companyId, perms, apps = [], onNavigate }: { companyId: string; perms: string[]; apps?: AppNavItem[]; onNavigate?: () => void }) {
   const pathname = usePathname();
   return (
     <nav className="flex flex-col gap-5 px-3" aria-label="Main">
       {SECTIONS.map((section, si) => {
-        const items = section.items.filter((i) => !i.perm || can(role, i.perm));
+        const items = section.items.filter((i) => !i.perm || (Array.isArray(i.perm) ? i.perm : [i.perm]).some((p) => perms.includes(p)));
         if (!items.length) return null;
         return (
           <div key={si} className="flex flex-col gap-0.5">

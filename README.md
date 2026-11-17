@@ -8,8 +8,8 @@ Multi-company, multi-user GST billing SaaS: tax invoices, quotations, credit/deb
 
 | Area | What you get |
 |---|---|
-| Companies & users | Sign up and create your company, invite users by email as **Owner / Accountant / Staff**. **Each user belongs to exactly one company** (any role), enforced by a unique index on `membership.userId` |
-| Super-admin panel | `/admin` for platform operators (emails in `SUPER_ADMIN_EMAILS`): create a company and invite/attach its owner, track setup progress, suspend/reactivate. Admins see counts only, never a company's books |
+| Companies & users | Sign up and create your company, invite users by email. **Roles (RBAC):** built-in **Owner / Accountant / Staff** plus custom roles built from individual permissions (*Settings → Roles*); a user can hold **several roles** and gets all their permissions. **Each user belongs to exactly one company**, enforced by a unique index on `membership.userId` |
+| Admin console | `/admin` for platform operators: **overview** (KPIs and charts across all companies), **companies** (create, invite owner, track setup, suspend), **users** (disable, sign out, reset password, set a temporary password), **audit log**, **system health** (event delivery, backups, plugin errors, cron, migrations), **plugins** and **admin roles**. Admins see counts only, never a company's books |
 | Setup wizard | `/c/<id>/setup`: Business & GST → Bank & invoice → Numbering & year → Team → First records. New owners land here; the dashboard shows progress until finished |
 | Masters | Customers & suppliers (GSTIN checksum validation, state auto-filled), products/services with HSN/SAC, unit, GST rate |
 | Sales | Tax invoices, quotations (→ convert to invoice), credit & debit notes against invoices. CGST+SGST/UTGST vs IGST chosen from place of supply. Tax-inclusive pricing, discounts, round-off, amount in words |
@@ -80,7 +80,7 @@ Hostinger's managed hosting provides **MySQL/MariaDB** and **Node.js app hosting
    - `BETTER_AUTH_SECRET`: a long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
    - `BETTER_AUTH_URL` and `APP_URL`: your public `https://` URL, exactly as users open it. Login is rejected from other origins.
    - `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`: a mailbox created under *Emails*.
-   - `SUPER_ADMIN_EMAILS`: comma-separated emails allowed into `/admin`. Sign up with one of these emails to become a platform admin.
+   - `SUPER_ADMIN_EMAILS`: comma-separated emails that are always full super admins (break-glass: they can't be locked out). Sign up with one of these emails, then give other staff limited access with **Admin → Users → Admin roles** (Super admin, Support, Viewer or your own roles).
 5. **Point your domain and enable SSL** (free SSL in hPanel), then deploy. Each push to the branch redeploys, and pending migrations run automatically when the app starts.
 6. **Backups:** enable Hostinger's daily backups. Company owners can also download a full JSON export under *Settings → Company → Export all data*.
 
@@ -143,11 +143,24 @@ For the suite (Lead Manager, WBportal). The contract is in `LeadManager/docs/ARC
   - **Retries:** a Hostinger Cron Job calls `GET /api/cron/tick` every minute with `Authorization: Bearer CRON_SECRET`. Failed deliveries retry after 1 m, 5 m, 30 m, 2 h and 12 h, then are marked failed.
   - **Signing:** `X-Suite-Event-Id`, `X-Suite-Timestamp`, and `X-Suite-Signature: v1=<hex HMAC-SHA256(secret, "<ts>.<body>")>`.
 
+## Roles and permissions
+
+**In a company** (*Settings → Roles* and *Settings → Users*)
+- Built-in roles: **Owner** (everything), **Accountant** (billing, payments, purchases, reports) and **Staff** (create invoices, quotations and masters). Their permissions are defined in `src/lib/permissions.ts`.
+- **Custom roles** pick individual permissions, including access to each plugin's pages (*Apps*).
+- A member can hold **several roles**; their permissions are the union.
+- Members can only give roles that don't exceed their own access, only an Owner can change another Owner, and a company always keeps at least one Owner.
+
+**In the admin panel** (*Admin → Roles*, assigned on a user's admin page)
+- Built-in: **Super admin** (everything), **Support** (companies, users, password help, audit log), **Viewer** (read-only overview, companies, system health), plus custom admin roles.
+- People in `SUPER_ADMIN_EMAILS` are always full super admins.
+- Every admin action is recorded in the audit log (*Admin → Audit*).
+
 ## Plugins
 
 MyGST can be extended with plugins, managed by the super admin in **Admin → Plugins**:
 
-- **Code plugins** live in `src/plugins/<id>/` and ship with a deploy. They can hook into events, validate or enrich documents, add PDF sections, pages, dashboard widgets, reports and settings.
+- **Code plugins** live in `src/plugins/<id>/` and ship with a deploy, or are **packed** (`npm run plugin:pack -- <id>`) and **uploaded** in Admin → Plugins without a deploy (trusted code, stored in the database). They can hook into events, validate or enrich documents, add PDF sections, pages, dashboard widgets, reports and settings.
 - **External plugins** run on their own server and are installed from a manifest URL. They receive signed events, call `/api/v1` with a key limited to their permissions, and show pages in a frame.
 
 When installing, the super admin chooses whether the plugin starts **on by default** and who it's **available to**: all companies (with per-company blocks), selected companies, or nobody (kill switch). Owners turn available plugins on or off and configure them in **Settings → Plugins**.

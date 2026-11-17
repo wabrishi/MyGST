@@ -1,9 +1,8 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
-import type { Role } from "@/generated/prisma/enums";
 import { db } from "./db";
 import { escapeHtml, mailEnabled, sendMail } from "./mail";
-import { ROLE_LABEL } from "./permissions";
+import { roleNames } from "./permissions";
 
 export const hashInviteToken = (t: string) => createHash("sha256").update(t).digest("hex");
 
@@ -15,7 +14,8 @@ export async function createInvitation(opts: {
   companyId: string;
   companyName: string;
   email: string;
-  role: Role;
+  /** Validated CompanyRole ids (see validRoleIds). */
+  roleIds: string[];
   invitedBy: { id: string; name: string };
 }) {
   const email = opts.email.trim().toLowerCase();
@@ -26,22 +26,23 @@ export async function createInvitation(opts: {
       data: {
         companyId: opts.companyId,
         email,
-        role: opts.role,
+        roleIds: opts.roleIds,
         tokenHash: hashInviteToken(token),
         invitedBy: opts.invitedBy.id,
         expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000),
       },
     });
     await tx.auditLog.create({
-      data: { companyId: opts.companyId, userId: opts.invitedBy.id, action: "invite", entity: "user", entityId: email, data: { role: opts.role } },
+      data: { companyId: opts.companyId, userId: opts.invitedBy.id, action: "invite", entity: "user", entityId: email, data: { roleIds: opts.roleIds } },
     });
   });
 
+  const roles = await db.companyRole.findMany({ where: { id: { in: opts.roleIds } }, select: { name: true } });
   const link = `${process.env.APP_URL ?? process.env.BETTER_AUTH_URL}/invite/${token}`;
   await sendMail({
     to: email,
     subject: `${opts.invitedBy.name} invited you to ${opts.companyName} on MyGST`,
-    html: `<p>${escapeHtml(opts.invitedBy.name)} has invited you to join <b>${escapeHtml(opts.companyName)}</b> as <b>${ROLE_LABEL[opts.role]}</b>.</p>
+    html: `<p>${escapeHtml(opts.invitedBy.name)} has invited you to join <b>${escapeHtml(opts.companyName)}</b> as <b>${escapeHtml(roleNames(roles))}</b>.</p>
 <p><a href="${escapeHtml(link)}">Accept invitation</a></p>
 <p>If you don't have a MyGST account yet, sign up with this email address first. The link expires in 7 days.</p>`,
   });

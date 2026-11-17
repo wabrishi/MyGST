@@ -1,22 +1,25 @@
 import { BookOpen, Puzzle } from "lucide-react";
 import Link from "next/link";
 import { Alert, Badge, Card, CardHeader, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
+import { adminCan, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { isPluginActive } from "@/lib/plugins/access";
 import { syncCodePlugins } from "@/lib/plugins/manage";
 import { PLUGIN_PERMISSIONS, type PluginPermission } from "@/lib/plugins/manifest";
 import { manifestOf } from "@/lib/plugins/runner";
-import { AddExternalForm, InstallPanel, RescanButton } from "./plugins-client";
+import { AddExternalForm, InstallPanel, RescanButton, UploadPluginForm } from "./plugins-client";
 
 export const metadata = { title: "Plugins" };
 
 const AVAIL_LABEL = { ALL: "All companies", SELECTED: "Selected companies", NONE: "Nobody" } as const;
+const KIND_LABEL = { CODE: "Built-in", EXTERNAL: "External", UPLOADED: "Uploaded" } as const;
 
 export default async function AdminPluginsPage() {
+  const admin = await requireAdmin("plugins.manage");
   // Code plugins come with the build: register new folders, flag removed ones.
   const { broken } = await syncCodePlugins();
   const [plugins, companyCount] = await Promise.all([
-    db.plugin.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }], include: { companies: true } }),
+    db.plugin.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }], omit: { bundle: true }, include: { companies: true } }),
     db.company.count(),
   ]);
   const companyIds = (await db.company.findMany({ select: { id: true } })).map((c) => c.id);
@@ -50,7 +53,7 @@ export default async function AdminPluginsPage() {
       <Card className="mb-5">
         {plugins.length === 0 ? (
           <Empty icon={Puzzle} title="No plugins yet">
-            Add a code plugin under <code>src/plugins/&lt;id&gt;</code> and deploy, or load an external plugin by URL below.
+            Add a code plugin under <code>src/plugins/&lt;id&gt;</code> and deploy, upload a packed plugin, or load an external plugin by URL below.
           </Empty>
         ) : (
           <Table>
@@ -77,7 +80,7 @@ export default async function AdminPluginsPage() {
                         {p.name}
                       </Link>
                       <div className="text-xs text-muted">
-                        {p.id} · v{p.version} · {p.kind === "CODE" ? "Built-in" : "External"}
+                        {p.id} · v{p.version} · {KIND_LABEL[p.kind]}
                       </div>
                       {manifest?.description && <div className="mt-0.5 max-w-md text-xs text-muted">{manifest.description}</div>}
                       {p.status === "NOT_INSTALLED" && manifest && <InstallPanel pluginId={p.id} name={p.name} permissions={perms} />}
@@ -104,7 +107,18 @@ export default async function AdminPluginsPage() {
         )}
       </Card>
 
-      <Card className="max-w-2xl p-5">
+      <div className="grid gap-5 lg:grid-cols-2">
+        {adminCan(admin, "plugins.upload") && (
+          <Card className="p-5">
+            <CardHeader
+              className="mb-3 p-0"
+              title="Upload a plugin"
+              description="A plugin packed with npm run plugin:pack. It's stored in the database, so redeploys keep it. Uploaded code is trusted: it runs inside MyGST."
+            />
+            <UploadPluginForm permissionLabels={PLUGIN_PERMISSIONS} />
+          </Card>
+        )}
+      <Card className="p-5">
         <CardHeader
           className="mb-3 p-0"
           title="Add an external plugin"
@@ -112,6 +126,7 @@ export default async function AdminPluginsPage() {
         />
         <AddExternalForm />
       </Card>
+      </div>
     </>
   );
 }

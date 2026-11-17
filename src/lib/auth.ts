@@ -1,6 +1,7 @@
 import "server-only";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
@@ -31,6 +32,17 @@ export const auth = betterAuth({
   },
   rateLimit: { enabled: true, window: 60, max: 30 },
   advanced: { cookiePrefix: COOKIE_PREFIX },
+  databaseHooks: {
+    session: {
+      create: {
+        // Accounts disabled by a platform admin can't sign in (existing sessions are deleted on disable).
+        before: async (session) => {
+          const u = await db.user.findUnique({ where: { id: session.userId }, select: { disabledAt: true } });
+          if (u?.disabledAt) throw new APIError("FORBIDDEN", { message: "This account has been disabled. Contact support.", code: "ACCOUNT_DISABLED" });
+        },
+      },
+    },
+  },
   plugins: [nextCookies()],
 });
 

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { Alert, Card, PageHeader } from "@/components/ui";
+import { canUseApp } from "@/lib/permissions";
 import { pluginLog } from "@/lib/plugins/log";
 import { activeEntries, contextFor } from "@/lib/plugins/runner";
 import { externalFrameUrl } from "@/lib/plugins/ui";
@@ -22,7 +23,7 @@ export default async function PluginPage({ params, searchParams }: PageProps<"/c
   const page = pageSlug ? entry.manifest.pages.find((p) => p.slug === pageSlug) : entry.manifest.pages[0];
   if (!page) notFound();
   if (!pageSlug) redirect(`/c/${ctx.companyId}/apps/${plugin}/${page.slug}`);
-  if (!page.roles.includes(ctx.role)) redirect(`/c/${ctx.companyId}/dashboard?denied=1`);
+  if (!canUseApp(ctx, plugin, page.roles)) redirect(`/c/${ctx.companyId}/dashboard?denied=1`);
 
   if (entry.code) {
     const Component = entry.code.pages.get(page.slug);

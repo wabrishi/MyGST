@@ -18,7 +18,7 @@ export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/
   const ctx = await requireCompany(companyId);
   const doc = await loadDocument(ctx.companyId, docId);
   if (!doc || doc.type !== DOC_KINDS[docKind].type) notFound();
-  if (!can(ctx.role, "reports.view") && doc.createdById !== ctx.user.id) notFound();
+  if (!can(ctx, "docs.viewAll") && doc.createdById !== ctx.user.id) notFound();
 
   const cfg = DOC_KINDS[docKind];
   const base = `/c/${ctx.companyId}`;
@@ -48,8 +48,8 @@ export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/
             balance={doc.balance}
             partyEmail={party?.email ?? ""}
             canEdit={canEditDoc(ctx, doc)}
-            canCancel={can(ctx.role, "docs.cancel")}
-            canPay={can(ctx.role, "payments.write")}
+            canCancel={can(ctx, "docs.cancel")}
+            canPay={can(ctx, "payments.write")}
           />
         }
       />

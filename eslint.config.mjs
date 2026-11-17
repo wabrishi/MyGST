@@ -28,6 +28,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Packed plugin bundles (npm run plugin:pack): generated CommonJS.
+    "dist-plugins/**",
   ]),
 ]);
 

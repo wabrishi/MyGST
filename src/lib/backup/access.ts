@@ -1,8 +1,9 @@
 import "server-only";
-import { isSuperAdmin } from "../admin";
+import { adminGrants } from "../admin";
 import { getSessionUser } from "../auth";
 import { db } from "../db";
 import { can } from "../permissions";
+import { memberGrants, ROLES_SELECT } from "../tenant";
 
 /** HttpOnly cookie holding the OAuth CSRF nonce. */
 export const NONCE_COOKIE = "mygst_backup_oauth";
@@ -15,19 +16,19 @@ export const returnPathOf = (s: BackupScopeParam) => (s.scope === "platform" ? "
 
 /**
  * Who may manage a backup destination:
- *  - platform: super-admins only
- *  - company:  that company's owners (company.settings permission)
+ *  - platform: admins with backups.manage
+ *  - company:  members with settings.backups
  * Returns the user, or null when not allowed.
  */
 export async function authorizeBackup(s: BackupScopeParam) {
   const user = await getSessionUser();
   if (!user) return null;
-  if (s.scope === "platform") return isSuperAdmin(user) ? user : null;
+  if (s.scope === "platform") return (await adminGrants(user.id, user.email)).permissions.has("backups.manage") ? user : null;
   const m = await db.membership.findUnique({
     where: { userId_companyId: { userId: user.id, companyId: s.companyId } },
-    select: { role: true, company: { select: { suspendedAt: true } } },
+    select: { ...ROLES_SELECT, company: { select: { suspendedAt: true } } },
   });
-  if (!m || m.company.suspendedAt || !can(m.role, "company.settings")) return null;
+  if (!m || m.company.suspendedAt || !can(memberGrants(m.roles), "settings.backups")) return null;
   return user;
 }
 

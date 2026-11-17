@@ -11,7 +11,7 @@ const pluginId = z.string().regex(/^[a-z][a-z0-9-]{1,40}[a-z0-9]$/);
 
 export async function ownerSetPluginEnabled(companyId: string, id: string, enabled: boolean): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.plugins");
     await setCompanyEnabled(pluginId.parse(id), ctx.companyId, !!enabled, ctx.user.id);
     await audit(ctx, enabled ? "enable" : "disable", "plugin", id);
     revalidatePath(`/c/${ctx.companyId}`, "layout");
@@ -21,7 +21,7 @@ export async function ownerSetPluginEnabled(companyId: string, id: string, enabl
 
 export async function ownerSavePluginSettings(companyId: string, id: string, values: Record<string, unknown>, clearSecrets: string[] = []): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.plugins");
     await saveCompanySettings(pluginId.parse(id), ctx.companyId, values, clearSecrets);
     await audit(ctx, "update", "plugin_settings", id);
     revalidatePath(`/c/${ctx.companyId}`, "layout");
@@ -31,7 +31,7 @@ export async function ownerSavePluginSettings(companyId: string, id: string, val
 
 export async function ownerReconnectPlugin(companyId: string, id: string): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.plugins");
     await reconnectExternal(pluginId.parse(id), ctx.companyId);
     await audit(ctx, "reconnect", "plugin", id);
     return ok(undefined, "Reconnected: a new key and secret were sent to the plugin");

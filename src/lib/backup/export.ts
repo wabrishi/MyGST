@@ -34,7 +34,7 @@ export async function exportCompanyData(companyId: string) {
   const where = { companyId };
   const [company, members, parties, products, numberSeries, documents, purchases, payments] = await Promise.all([
     db.company.findUniqueOrThrow({ where: { id: companyId } }),
-    db.membership.findMany({ where, select: { role: true, user: { select: { name: true, email: true } } } }),
+    db.membership.findMany({ where, select: { roles: { select: { role: { select: { name: true } } } }, user: { select: { name: true, email: true } } } }),
     db.party.findMany({ where }),
     db.product.findMany({ where }),
     db.numberSeries.findMany({ where }),

@@ -2,9 +2,10 @@ import { Check, Circle } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, PageHeader, Table, Td, Th } from "@/components/ui";
+import { adminCan, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { stateName } from "@/lib/gst/states";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { roleNames } from "@/lib/permissions";
 import { STATE_LABEL, companyPluginState } from "@/lib/plugins/access";
 import { setupStatus } from "@/lib/setup";
 import { CompanyAccessToggle } from "../../plugins/plugins-client";
@@ -14,6 +15,8 @@ export const metadata = { title: "Company" };
 
 export default async function AdminCompanyPage({ params }: PageProps<"/admin/companies/[companyId]">) {
   const { companyId } = await params;
+  const admin = await requireAdmin("companies.view");
+  const manage = adminCan(admin, "companies.manage");
   const c = await db.company.findUnique({
     where: { id: companyId },
     select: {
@@ -29,18 +32,20 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
       createdVia: true,
       setupCompletedAt: true,
       suspendedAt: true,
-      memberships: { orderBy: { createdAt: "asc" }, select: { id: true, role: true, createdAt: true, user: { select: { name: true, email: true } } } },
-      invitations: { where: { acceptedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, email: true, role: true, expiresAt: true } },
+      memberships: { orderBy: { createdAt: "asc" }, select: { id: true, createdAt: true, user: { select: { id: true, name: true, email: true } }, roles: { select: { role: { select: { name: true } } } } } },
+      invitations: { where: { acceptedAt: null }, orderBy: { createdAt: "desc" }, select: { id: true, email: true, roleIds: true, expiresAt: true } },
       _count: { select: { documents: true, purchases: true, payments: true, parties: true, products: true } },
     },
   });
   if (!c) notFound();
   const status = await setupStatus(c.id);
+  const roleRows = await db.companyRole.findMany({ where: { OR: [{ companyId: null }, { companyId: c.id }] }, select: { id: true, name: true } });
+  const inviteRoleNames = (ids: unknown) => roleNames(roleRows.filter((r) => Array.isArray(ids) && ids.includes(r.id)));
   const plugins = await db.plugin.findMany({ where: { status: "INSTALLED" }, orderBy: { name: "asc" }, include: { companies: { where: { companyId: c.id } } } });
 
   return (
     <>
-      <Link href="/admin" className="text-xs text-primary hover:underline">
+      <Link href="/admin/companies" className="text-xs text-primary hover:underline">
         ← All companies
       </Link>
       <PageHeader
@@ -52,7 +57,7 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
             {c.createdVia === "ADMIN" ? " by admin" : " via sign-up"}
           </span>
         }
-        actions={<SuspendButton companyId={c.id} suspended={!!c.suspendedAt} />}
+        actions={manage && <SuspendButton companyId={c.id} suspended={!!c.suspendedAt} />}
       />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -64,16 +69,24 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
                 <tr>
                   <Th>Name</Th>
                   <Th>Email</Th>
-                  <Th>Role</Th>
+                  <Th>Roles</Th>
                   <Th>Since</Th>
                 </tr>
               </thead>
               <tbody>
                 {c.memberships.map((m) => (
                   <tr key={m.id}>
-                    <Td>{m.user.name}</Td>
+                    <Td>
+                      {adminCan(admin, "users.view") ? (
+                        <Link href={`/admin/users/${m.user.id}`} className="text-primary hover:underline">
+                          {m.user.name}
+                        </Link>
+                      ) : (
+                        m.user.name
+                      )}
+                    </Td>
                     <Td>{m.user.email}</Td>
-                    <Td>{ROLE_LABEL[m.role]}</Td>
+                    <Td>{roleNames(m.roles.map((r) => r.role))}</Td>
                     <Td className="text-xs text-muted">{m.createdAt.toISOString().slice(0, 10)}</Td>
                   </tr>
                 ))}
@@ -81,7 +94,7 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
                   <tr key={i.id} className="text-muted">
                     <Td>Pending invite</Td>
                     <Td>{i.email}</Td>
-                    <Td>{ROLE_LABEL[i.role]}</Td>
+                    <Td>{inviteRoleNames(i.roleIds)}</Td>
                     <Td className="text-xs">{i.expiresAt < new Date() ? "expired" : `expires ${i.expiresAt.toISOString().slice(0, 10)}`}</Td>
                   </tr>
                 ))}
@@ -95,11 +108,13 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
               </tbody>
             </Table>
           </Card>
-          <Card className="p-4">
-            <h2 className="mb-1 font-semibold">Invite owner or user</h2>
-            <p className="mb-3 text-xs text-muted">Re-inviting an email replaces its previous pending link.</p>
-            <AdminInviteForm companyId={c.id} />
-          </Card>
+          {manage && (
+            <Card className="p-4">
+              <h2 className="mb-1 font-semibold">Invite owner or user</h2>
+              <p className="mb-3 text-xs text-muted">Re-inviting an email replaces its previous pending link.</p>
+              <AdminInviteForm companyId={c.id} />
+            </Card>
+          )}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -151,8 +166,8 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
                         </Link>
                         <span className="block text-xs text-muted">{STATE_LABEL[companyPluginState(p, cp)]}</span>
                       </span>
-                      {p.availability === "SELECTED" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="allow" on={!!cp?.allowed} />}
-                      {p.availability === "ALL" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="block" on={!!cp?.blocked} />}
+                      {adminCan(admin, "plugins.manage") && p.availability === "SELECTED" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="allow" on={!!cp?.allowed} />}
+                      {adminCan(admin, "plugins.manage") && p.availability === "ALL" && <CompanyAccessToggle pluginId={p.id} companyId={c.id} mode="block" on={!!cp?.blocked} />}
                     </li>
                   );
                 })}

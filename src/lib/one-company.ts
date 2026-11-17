@@ -3,7 +3,7 @@ import { UserError } from "./action";
 import { db, type Tx } from "./db";
 
 /**
- * Business rule: a user belongs to exactly ONE company, in any role (Owner, Accountant or Staff).
+ * Business rule: a user belongs to exactly ONE company, with any roles.
  * Enforced twice:
  *  1. Friendly pre-checks below (clear error messages).
  *  2. A unique index on membership.userId, so the rule holds even for concurrent requests.
@@ -13,9 +13,9 @@ import { db, type Tx } from "./db";
 export async function userCompany(userId: string, tx: Tx | typeof db = db) {
   const m = await tx.membership.findUnique({
     where: { userId },
-    select: { role: true, company: { select: { id: true, legalName: true, tradeName: true } } },
+    select: { company: { select: { id: true, legalName: true, tradeName: true } } },
   });
-  return m ? { ...m.company, role: m.role } : null;
+  return m ? m.company : null;
 }
 
 /** Throws a user-facing error if `userId` already belongs to a company (other than `exceptCompanyId`). */

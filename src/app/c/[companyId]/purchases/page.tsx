@@ -47,7 +47,7 @@ export default async function PurchasesPage({ params, searchParams }: PageProps<
       <PageHeader
         title="Purchases"
         subtitle={`${formatINR(toPaise(sums._sum.grandTotal?.toNumber() ?? 0))} purchases · ${formatINR(itc)} GST paid`}
-        actions={can(ctx.role, "purchases.write") && <ButtonLink href={`${base}/new`}>+ New purchase bill</ButtonLink>}
+        actions={can(ctx, "purchases.write") && <ButtonLink href={`${base}/new`}>+ New purchase bill</ButtonLink>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SearchBox placeholder="Search bill no., supplier, GSTIN" />

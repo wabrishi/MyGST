@@ -15,6 +15,7 @@ import { addExternalPlugin, installPlugin, saveCompanySettings, setAvailability,
 import { activeEntries, applyFilters } from "@/lib/plugins/runner";
 import { verifyPageToken } from "@/lib/plugins/token";
 import type { CompanyContext } from "@/lib/tenant";
+import { memberContext } from "./helpers";
 
 /**
  * Plugins against the real database. Uses SELECTED availability (only this file's companies), so test files
@@ -34,8 +35,7 @@ describe("plugins", () => {
     const stamp = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
     const user = await db.user.create({ data: { id: `plg-${stamp}`, name: "Plugin Tester", email: `plg-${stamp}@test.local` } });
     const company = await db.company.create({ data: { legalName: name, stateCode: "27", address: "Pune" } });
-    await db.membership.create({ data: { userId: user.id, companyId: company.id, role: "OWNER" } });
-    return { user: { id: user.id, name: user.name, email: user.email }, companyId: company.id, role: "OWNER", company: { id: company.id, legalName: name, tradeName: "", stateCode: "27", gstin: "" } };
+    return memberContext(user, company);
   };
   const invoice = async (ctx: CompanyContext, notes = "PO: 1001") => {
     const party = await db.party.create({ data: { companyId: ctx.companyId, name: "Buyer", stateCode: "27", gstin: "" } });

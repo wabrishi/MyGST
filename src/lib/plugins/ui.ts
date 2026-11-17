@@ -1,5 +1,6 @@
 import "server-only";
 import { decryptSecret } from "../backup/crypto";
+import { canUseApp } from "../permissions";
 import type { CompanyContext } from "../tenant";
 import { pluginLog } from "./log";
 import { activeEntries, applyFilters, contextFor, type PluginEntry } from "./runner";
@@ -13,7 +14,6 @@ export interface PluginNavItem {
   icon: string;
 }
 
-const roleOk = (roles: readonly string[] | undefined, role: string) => !roles || roles.includes(role);
 
 /** Resolves a plugin-provided href: absolute https stays as is; anything else is a path inside the company. */
 export function companyHref(companyId: string, href: string) {
@@ -26,7 +26,7 @@ export async function pluginNav(ctx: CompanyContext): Promise<PluginNavItem[]> {
   const items: PluginNavItem[] = [];
   for (const e of entries) {
     for (const p of e.manifest.pages) {
-      if (p.inNav && roleOk(p.roles, ctx.role)) items.push({ href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`, label: p.title, icon: p.icon ?? e.manifest.icon });
+      if (p.inNav && canUseApp(ctx, e.plugin.id, p.roles)) items.push({ href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`, label: p.title, icon: p.icon ?? e.manifest.icon });
     }
   }
   const extra = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role }, "nav.items", [] as LinkItem[], {});
@@ -47,7 +47,7 @@ export async function pluginWidgets(ctx: CompanyContext): Promise<WidgetSlot[]> 
   const entries = await activeEntries(ctx.companyId);
   return entries.flatMap((e) =>
     e.manifest.widgets
-      .filter((w) => roleOk(w.roles, ctx.role))
+      .filter((w) => canUseApp(ctx, e.plugin.id, w.roles))
       .filter((w) => (e.code ? e.code.widgets.has(w.id) : !!e.manifest.pageBaseUrl))
       .map((w) => ({ key: `${e.plugin.id}:${w.id}`, pluginId: e.plugin.id, title: w.title, width: w.width, entry: e, widgetId: w.id })),
   );
@@ -68,7 +68,7 @@ export async function renderCodeWidget(slot: WidgetSlot, ctx: CompanyContext) {
 /** URL for an external plugin's framed page/widget, with a 5-minute signed token. */
 export function externalFrameUrl(e: PluginEntry, ctx: CompanyContext, view: string, path: string[] = [], search = "") {
   if (!e.manifest.pageBaseUrl || !e.cp?.webhookSecretEnc) return null;
-  const token = signPageToken(decryptSecret(e.cp.webhookSecretEnc), { plugin: e.plugin.id, companyId: ctx.companyId, userId: ctx.user.id, name: ctx.user.name, role: ctx.role, view });
+  const token = signPageToken(decryptSecret(e.cp.webhookSecretEnc), { plugin: e.plugin.id, companyId: ctx.companyId, userId: ctx.user.id, name: ctx.user.name, role: ctx.role ?? "MEMBER", view });
   const base = e.manifest.pageBaseUrl.replace(/\/+$/, "");
   const target = view.startsWith("widget:") ? `${base}/widgets/${view.slice(7)}` : `${base}/${[view, ...path].map(encodeURIComponent).join("/")}`;
   const qs = new URLSearchParams(search);

@@ -1,9 +1,11 @@
 import { Card, PageHeader } from "@/components/ui";
+import { requireAdmin } from "@/lib/admin";
 import { NewCompanyForm } from "./new-company-form";
 
 export const metadata = { title: "New company" };
 
-export default function NewCompanyPage() {
+export default async function NewCompanyPage() {
+  await requireAdmin("companies.manage");
   return (
     <div className="max-w-2xl">
       <PageHeader

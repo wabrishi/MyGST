@@ -15,7 +15,7 @@ import { requireCompany } from "@/lib/tenant";
 
 export async function createApiKey(companyId: string, name: string): Promise<ActionResult<{ key: string; prefix: string }>> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.apiKeys");
     const label = z.string().trim().min(1, "Give the key a name, e.g. “Lead Manager”").max(60).parse(name);
     if ((await db.apiKey.count({ where: { companyId: ctx.companyId, revokedAt: null } })) >= 20) throw new UserError("Revoke an unused key first (limit 20)");
     const { key, hash, prefix } = generateApiKey();
@@ -28,7 +28,7 @@ export async function createApiKey(companyId: string, name: string): Promise<Act
 
 export async function revokeApiKey(companyId: string, id: string): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.apiKeys");
     const r = await db.apiKey.updateMany({ where: { id, companyId: ctx.companyId, revokedAt: null }, data: { revokedAt: new Date() } });
     if (r.count !== 1) throw new UserError("Key not found or already revoked");
     await audit(ctx, "revoke", "api_key", id);
@@ -43,7 +43,7 @@ const newSecret = () => "whsec_" + randomBytes(24).toString("base64url");
 
 export async function saveLeadsWebhook(companyId: string, input: { url: string; enabled: boolean }): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.integrations");
     const url = input.url.trim();
     if (url) {
       const problem = validateWebhookUrl(url);
@@ -63,7 +63,7 @@ export async function saveLeadsWebhook(companyId: string, input: { url: string; 
 
 export async function regenerateWebhookSecret(companyId: string): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.integrations");
     const r = await db.companyIntegration.updateMany({ where: { companyId: ctx.companyId }, data: { webhookSecretEnc: encryptSecret(newSecret()) } });
     if (r.count !== 1) throw new UserError("Save a webhook URL first");
     await audit(ctx, "rotate_secret", "integration", "leads_webhook");
@@ -75,7 +75,7 @@ export async function regenerateWebhookSecret(companyId: string): Promise<Action
 /** Sends a signed `test.ping` straight away (not via the outbox) and reports what the receiver said. */
 export async function sendTestEvent(companyId: string): Promise<ActionResult<{ status: number }>> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.integrations");
     const i = await db.companyIntegration.findUnique({ where: { companyId: ctx.companyId } });
     if (!i?.leadsWebhookUrl) throw new UserError("Save a webhook URL first");
     const id = newEventId();
@@ -107,7 +107,7 @@ export async function sendTestEvent(companyId: string): Promise<ActionResult<{ s
 /** Re-queues failed (dead) events and tries to deliver them now. */
 export async function retryFailedEvents(companyId: string): Promise<ActionResult> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.integrations");
     const r = await db.outboxEvent.updateMany({ where: { companyId: ctx.companyId, pluginId: null, status: "DEAD" }, data: { status: "PENDING", attempts: 0, nextAttemptAt: new Date() } });
     const sent = await deliverPending({ companyId: ctx.companyId, limit: 50 });
     revalidatePath(`/c/${ctx.companyId}/settings/integrations`);
@@ -118,7 +118,7 @@ export async function retryFailedEvents(companyId: string): Promise<ActionResult
 /** Reveals the signing secret to an owner (shown on demand, not in the page HTML). */
 export async function revealWebhookSecret(companyId: string): Promise<ActionResult<{ secret: string }>> {
   return run(async () => {
-    const ctx = await requireCompany(companyId, "company.settings");
+    const ctx = await requireCompany(companyId, "settings.integrations");
     const i = await db.companyIntegration.findUnique({ where: { companyId: ctx.companyId } });
     if (!i) throw new UserError("Save a webhook URL first");
     return ok({ secret: decryptSecret(i.webhookSecretEnc) });

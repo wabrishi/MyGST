@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction } from "@/components/form-utils";
 import { Alert, Button, Field, Input } from "@/components/ui";
-import { adminAddExternalPlugin, adminInstallPlugin, adminRescanPlugins, adminSetAvailability, adminSetCompanyAccess, adminUninstallPlugin } from "./actions";
+import type { UploadPreview } from "@/lib/plugins/manage";
+import { adminAddExternalPlugin, adminConfirmUpload, adminInstallPlugin, adminPreviewUpload, adminRescanPlugins, adminSetAvailability, adminSetCompanyAccess, adminUninstallPlugin } from "./actions";
 
 const AVAILABILITY = [
   { value: "ALL", label: "All companies", hint: "Every company can use it (you can still block some)." },
@@ -147,7 +148,7 @@ export function CompanyAccessToggle({ pluginId, companyId, mode, on }: { pluginI
   );
 }
 
-export function UninstallButton({ pluginId, kind }: { pluginId: string; kind: "CODE" | "EXTERNAL" }) {
+export function UninstallButton({ pluginId, kind }: { pluginId: string; kind: "CODE" | "EXTERNAL" | "UPLOADED" }) {
   const router = useRouter();
   const { execute, pending, error } = useAction(adminUninstallPlugin.bind(null, pluginId));
   return (
@@ -157,7 +158,7 @@ export function UninstallButton({ pluginId, kind }: { pluginId: string; kind: "C
         size="sm"
         disabled={pending}
         onClick={async () => {
-          if (!confirm(kind === "EXTERNAL" ? "Uninstall and remove this external plugin? Its settings and data are deleted." : "Uninstall this plugin for everyone?")) return;
+          if (!confirm(kind !== "CODE" ? `Uninstall and remove this ${kind === "EXTERNAL" ? "external" : "uploaded"} plugin? Its ${kind === "UPLOADED" ? "code, " : ""}settings and data are deleted.` : "Uninstall this plugin for everyone?")) return;
           const keepData = kind === "CODE" && confirm("Keep its settings and data so they come back if you reinstall it? (Cancel = delete them)");
           const r = await execute(keepData);
           if (r?.ok) router.push("/admin/plugins");
@@ -212,5 +213,107 @@ export function RescanButton() {
         Rescan
       </Button>
     </span>
+  );
+}
+
+/**
+ * Trusted code upload: choose the .mygst-plugin.js file from `npm run plugin:pack`, check what it is
+ * (id, version, permissions, checksum), then confirm. Installing is the usual next step.
+ */
+export function UploadPluginForm({ permissionLabels }: { permissionLabels: Record<string, string> }) {
+  const router = useRouter();
+  const [file, setFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState<UploadPreview | null>(null);
+  const [downgrade, setDowngrade] = useState(false);
+  const check = useAction(adminPreviewUpload);
+  const save = useAction(adminConfirmUpload);
+  const form = (extra: Record<string, string> = {}) => {
+    const fd = new FormData();
+    if (file) fd.set("bundle", file);
+    for (const [k, v] of Object.entries(extra)) fd.set(k, v);
+    return fd;
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label="Plugin file" hint="The .mygst-plugin.js file made by npm run plugin:pack (max 2 MB)">
+        <Input
+          type="file"
+          accept=".js,application/javascript,text/javascript"
+          onChange={(e) => {
+            setFile(e.target.files?.[0] ?? null);
+            setPreview(null);
+          }}
+        />
+      </Field>
+      {!preview && (
+        <Button
+          className="self-start"
+          disabled={!file || check.pending}
+          onClick={async () => {
+            const r = await check.execute(form());
+            if (r?.ok) setPreview(r.data);
+          }}
+        >
+          {check.pending ? "Checking…" : "Check file"}
+        </Button>
+      )}
+      {check.error && <Alert>{check.error}</Alert>}
+      {preview && (
+        <div role="dialog" aria-label={`Upload ${preview.name}`} className="flex flex-col gap-3 rounded-xl border border-border bg-surface-2 p-4 text-sm">
+          <div>
+            <div className="font-semibold">
+              {preview.name} <span className="font-normal text-muted">v{preview.version}</span>
+            </div>
+            <div className="text-xs text-muted">
+              {preview.id}
+              {preview.author && ` · by ${preview.author}`} · {(preview.sizeBytes / 1024).toFixed(1)} KB
+              {preview.existingVersion && ` · replaces v${preview.existingVersion}`}
+            </div>
+            {preview.description && <p className="mt-1 text-xs text-muted">{preview.description}</p>}
+          </div>
+          <div className="break-all font-mono text-[11px] text-muted">SHA-256 {preview.sha256}</div>
+          <div>
+            <div className="text-xs font-medium">Asks for:</div>
+            {preview.permissions.length ? (
+              <ul className="list-disc pl-5 text-xs">
+                {preview.permissions.map((p) => (
+                  <li key={p}>
+                    {permissionLabels[p] ?? p}
+                    {preview.permissionsAdded.includes(p) && <b className="text-warning"> (new)</b>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted">No company data.</p>
+            )}
+          </div>
+          <Alert kind="warning">
+            This code runs inside MyGST with full access to the server and every company&apos;s data. The permissions above only limit what it asks
+            for through the SDK. Upload only plugins you wrote or trust, and check the checksum matches what the author published.
+          </Alert>
+          {preview.downgrade && (
+            <label className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={downgrade} onChange={(e) => setDowngrade(e.target.checked)} />
+              Allow downgrade from v{preview.existingVersion} to v{preview.version}
+            </label>
+          )}
+          {save.error && <Alert>{save.error}</Alert>}
+          <div className="flex gap-2">
+            <Button
+              disabled={save.pending || (preview.downgrade && !downgrade)}
+              onClick={async () => {
+                const r = await save.execute(form({ sha256: preview.sha256, ...(downgrade ? { allowDowngrade: "on" } : {}) }));
+                if (r?.ok) router.push(`/admin/plugins/${r.data.id}`);
+              }}
+            >
+              {save.pending ? "Uploading…" : preview.existingVersion ? "Update plugin" : "Upload plugin"}
+            </Button>
+            <Button variant="secondary" onClick={() => setPreview(null)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

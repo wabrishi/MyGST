@@ -26,7 +26,7 @@ export default async function DocListPage({ params, searchParams }: PageProps<"/
   const fy = await selectedFyRange(ctx.companyId);
   const [from, to] = rangeFrom(sp, fy);
   const page = pageFrom(sp);
-  const ownOnly = !can(ctx.role, "reports.view"); // staff see only their own documents
+  const ownOnly = !can(ctx, "docs.viewAll"); // without it, members see only their own documents
 
   const where: Prisma.DocumentWhereInput = {
     companyId: ctx.companyId,

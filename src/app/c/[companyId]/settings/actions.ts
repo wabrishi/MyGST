@@ -12,7 +12,9 @@ import { PREFIX_PATTERN, financialYear, todayIST } from "@/lib/gst/fy";
 import { createInvitation } from "@/lib/invitations";
 import { assertEmailHasNoCompany } from "@/lib/one-company";
 import { ensureSeries } from "@/lib/numbering";
-import { requireCompany } from "@/lib/tenant";
+import { rolePermissions } from "@/lib/permissions";
+import { holdsOwner, ownerCount, setMemberRoles as replaceMemberRoles, validRoleIds } from "@/lib/roles";
+import { requireCompany, type CompanyContext } from "@/lib/tenant";
 import { companySchema, type CompanyInput } from "@/lib/validation";
 
 export async function updateCompany(companyId: string, input: CompanyInput): Promise<ActionResult> {
@@ -51,17 +53,33 @@ export async function uploadLogo(companyId: string, form: FormData): Promise<Act
 
 // ─────────────── Users & invitations ───────────────
 
-const roleSchema = z.enum(["OWNER", "ACCOUNTANT", "STAFF"]);
+/**
+ * No privilege escalation: a member can only hand out roles whose permissions they hold themselves,
+ * and only an Owner can change or remove another Owner.
+ */
+async function assertCanGrant(ctx: CompanyContext, roleIds: string[]) {
+  const roles = await db.companyRole.findMany({ where: { id: { in: roleIds } }, select: { id: true, key: true, name: true, permissions: true } });
+  for (const r of roles) {
+    if (rolePermissions(r).some((p) => !ctx.permissions.has(p))) throw new UserError(`You can't give the ${r.name} role: it has access you don't have`);
+  }
+}
+
+async function assertCanManage(ctx: CompanyContext, membershipId: string) {
+  const m = await db.membership.findFirst({ where: { id: membershipId, companyId: ctx.companyId }, select: { id: true, userId: true, roles: { select: { roleId: true } } } });
+  if (!m) throw new UserError("Member not found");
+  if (holdsOwner(m.roles.map((r) => r.roleId)) && ctx.role !== "OWNER") throw new UserError("Only an Owner can change another Owner");
+  return m;
+}
 
 export async function inviteUser(
   companyId: string,
-  input: { email: string; role: string },
+  input: { email: string; roleIds: string[] },
 ): Promise<ActionResult<{ link: string; emailed: boolean }>> {
   return run(async () => {
     const ctx = await requireCompany(companyId, "company.users");
-    const { email, role } = z
-      .object({ email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")), role: roleSchema })
-      .parse(input);
+    const { email } = z.object({ email: z.string().trim().toLowerCase().pipe(z.email("Enter a valid email")) }).parse(input);
+    const roleIds = await validRoleIds(ctx.companyId, input.roleIds);
+    await assertCanGrant(ctx, roleIds);
 
     const existing = await db.membership.findFirst({ where: { companyId: ctx.companyId, user: { email } } });
     if (existing) throw new UserError("This person is already a member", "email");
@@ -71,7 +89,7 @@ export async function inviteUser(
       companyId: ctx.companyId,
       companyName: ctx.company.tradeName || ctx.company.legalName,
       email,
-      role,
+      roleIds,
       invitedBy: ctx.user,
     });
     revalidatePath(`/c/${ctx.companyId}/settings/users`);
@@ -88,35 +106,28 @@ export async function revokeInvite(companyId: string, inviteId: string): Promise
   });
 }
 
-/** Loads a member of this company; if they are losing OWNER, ensures another owner remains. */
-async function loadMember(companyId: string, membershipId: string, losingOwner: (role: string) => boolean) {
-  const m = await db.membership.findFirst({ where: { id: membershipId, companyId } });
-  if (!m) throw new UserError("Member not found");
-  if (m.role === "OWNER" && losingOwner(m.role)) {
-    const owners = await db.membership.count({ where: { companyId, role: "OWNER" } });
-    if (owners <= 1) throw new UserError("A company must have at least one owner");
-  }
-  return m;
-}
-
-export async function changeRole(companyId: string, membershipId: string, role: string): Promise<ActionResult> {
+/** Replaces a member's roles (one or more). */
+export async function setMemberRoles(companyId: string, membershipId: string, roleIds: string[]): Promise<ActionResult> {
   return run(async () => {
     const ctx = await requireCompany(companyId, "company.users");
-    const newRole = roleSchema.parse(role);
-    const m = await loadMember(ctx.companyId, membershipId, () => newRole !== "OWNER");
-    if (m.role === newRole) return ok(undefined);
-    await db.membership.update({ where: { id: m.id }, data: { role: newRole } });
-    await audit(ctx, "role", "membership", m.id, { from: m.role, to: newRole });
+    await assertCanManage(ctx, membershipId);
+    const valid = await validRoleIds(ctx.companyId, roleIds);
+    await assertCanGrant(ctx, valid);
+    const change = await db.$transaction((tx) => replaceMemberRoles(tx, ctx.companyId, membershipId, valid));
+    await audit(ctx, "roles", "membership", membershipId, { from: change.prev, to: change.next });
     revalidatePath(`/c/${ctx.companyId}`, "layout");
-    return ok(undefined, "Role updated");
+    return ok(undefined, "Roles updated");
   });
 }
 
 export async function removeMember(companyId: string, membershipId: string): Promise<ActionResult> {
   return run(async () => {
     const ctx = await requireCompany(companyId, "company.users");
-    const m = await loadMember(ctx.companyId, membershipId, () => true);
-    await db.membership.delete({ where: { id: m.id } });
+    const m = await assertCanManage(ctx, membershipId);
+    await db.$transaction(async (tx) => {
+      if (holdsOwner(m.roles.map((r) => r.roleId)) && (await ownerCount(ctx.companyId, tx)) <= 1) throw new UserError("A company must have at least one owner");
+      await tx.membership.delete({ where: { id: m.id } });
+    });
     await audit(ctx, "remove", "membership", m.id, { userId: m.userId });
     revalidatePath(`/c/${ctx.companyId}/settings/users`);
     return ok(undefined, "Member removed");

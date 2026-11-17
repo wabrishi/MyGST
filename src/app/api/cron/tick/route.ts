@@ -18,6 +18,10 @@ async function handle(request: Request) {
   const events = await deliverPending({ limit: 100 });
   // Housekeeping (cheap, indexed): plugin logs older than 30 days.
   const pruned = await db.pluginLog.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 864e5) } } }).catch(() => ({ count: 0 }));
+  // Shown on Admin → System ("cron last ran").
+  await db.systemState
+    .upsert({ where: { key: "cron.lastTick" }, create: { key: "cron.lastTick", value: { at: new Date().toISOString(), events } }, update: { value: { at: new Date().toISOString(), events } } })
+    .catch(() => {});
   return Response.json({ events, pluginLogsPruned: pruned.count });
 }
 

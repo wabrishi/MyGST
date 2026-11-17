@@ -22,9 +22,9 @@ export async function deliverPluginEvent(row: { id: string; companyId: string; p
   const env = row.envelope as PluginEventEnvelope;
 
   let result: DeliveryResult;
-  if (plugin.kind === "CODE") {
-    const { codePlugin } = await import("./registry");
-    const code = codePlugin(plugin.id);
+  if (plugin.kind !== "EXTERNAL") {
+    const { codeFor } = await import("./uploaded");
+    const code = await codeFor(plugin);
     const handlers = code?.actions.get(env.type as PluginEvent) ?? [];
     const entry: PluginEntry = { plugin, cp, manifest, code, available: true, active: true };
     result = { ok: true };

@@ -2,13 +2,14 @@ import { ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/brand";
 import { Avatar, Badge } from "@/components/ui";
-import { requireSuperAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin";
 import { AdminNav } from "./admin-nav";
 
 export const metadata = { title: { default: "Admin", template: "%s · MyGST Admin" } };
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
-  const admin = await requireSuperAdmin();
+  const admin = await requireAdmin();
+  const roleLabel = admin.breakGlass ? "Super admin" : admin.roles.map((r) => r.name).join(", ");
   return (
     <div className="flex min-h-screen flex-1 flex-col">
       <header className="sticky top-0 z-30 border-b border-border bg-surface/85 backdrop-blur-md">
@@ -16,16 +17,16 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           <div className="flex items-center gap-3">
             <Logo href="/admin" />
             <Badge color="amber">
-              <ShieldCheck size={12} className="-ml-0.5" /> Super admin
+              <ShieldCheck size={12} className="-ml-0.5" /> {roleLabel}
             </Badge>
           </div>
-          <AdminNav />
+          <AdminNav perms={[...admin.permissions]} />
           <div className="ml-auto flex items-center gap-3 text-[13px]">
             <Link href="/companies" className="hidden text-muted hover:text-foreground sm:inline">
               My company
             </Link>
-            <span className="hidden text-muted md:inline">{admin.email}</span>
-            <Avatar name={admin.name} size={30} />
+            <span className="hidden text-muted md:inline">{admin.user.email}</span>
+            <Avatar name={admin.user.name} size={30} />
           </div>
         </div>
       </header>

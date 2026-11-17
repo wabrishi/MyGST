@@ -4,7 +4,8 @@ import { Alert, ButtonLink, Card, PageHeader, cn } from "@/components/ui";
 import { db } from "@/lib/db";
 import { financialYear, todayIST } from "@/lib/gst/fy";
 import { DEFAULT_PREFIX, DOC_LABEL } from "@/lib/numbering";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { BUILTIN_ROLE_ID, roleNames } from "@/lib/permissions";
+import { companyRoles } from "@/lib/roles";
 import { SETUP_STEPS, setupStatus } from "@/lib/setup";
 import { requireCompanyPage } from "@/lib/tenant";
 import { LogoForm } from "../settings/company/logo-form";
@@ -80,19 +81,20 @@ export default async function SetupPage({ params, searchParams }: PageProps<"/c/
   } else if (step === 4) {
     const members = await db.membership.findMany({
       where: { companyId: ctx.companyId },
-      include: { user: { select: { name: true, email: true } } },
+      include: { user: { select: { name: true, email: true } }, roles: { select: { role: { select: { name: true } } } } },
     });
+    const roleOptions = (await companyRoles(ctx.companyId)).map(({ id, name, description, builtin }) => ({ id, name, description, builtin }));
     body = (
       <div className="flex flex-col gap-4">
         <p className="text-muted">
           <b>Accountant</b>: billing, payments, purchases and reports. <b>Staff</b>: create invoices and quotations only. <b>Owner</b>: full
           control including settings. You can skip this step.
         </p>
-        <InviteForm companyId={ctx.companyId} />
+        <InviteForm companyId={ctx.companyId} roles={roleOptions} defaultRoleId={BUILTIN_ROLE_ID.STAFF} />
         <ul className="text-sm">
           {members.map((m) => (
             <li key={m.id}>
-              {m.user.name} · {m.user.email} · <span className="text-muted">{ROLE_LABEL[m.role]}</span>
+              {m.user.name} · {m.user.email} · <span className="text-muted">{roleNames(m.roles.map((r) => r.role))}</span>
             </li>
           ))}
           {status.counts.invites > 0 && <li className="text-muted">{status.counts.invites} pending invitation(s)</li>}

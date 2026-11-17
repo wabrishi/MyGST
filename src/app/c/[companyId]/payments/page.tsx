@@ -17,7 +17,7 @@ export const metadata = { title: "Payments" };
 export default async function PaymentsPage({ params, searchParams }: PageProps<"/c/[companyId]/payments">) {
   const { companyId } = await params;
   const sp = await searchParams;
-  const ctx = await requireCompanyPage(companyId, "payments.write");
+  const ctx = await requireCompanyPage(companyId, "payments.view");
   const fy = await selectedFyRange(ctx.companyId);
   const [from, to] = rangeFrom(sp, fy);
   const q = typeof sp.q === "string" ? sp.q.trim() : "";

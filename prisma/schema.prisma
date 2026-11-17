@@ -15,12 +15,15 @@ model User {
   email         String   @unique
   emailVerified Boolean  @default(false)
   image         String?  @db.Text
+  /// Disabled by a platform admin: can't sign in, sessions are dropped.
+  disabledAt    DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  sessions    Session[]
-  accounts    Account[]
-  memberships Membership[]
+  sessions      Session[]
+  accounts      Account[]
+  memberships   Membership[]
+  platformRoles PlatformRoleAssignment[]
 
   @@map("user")
 }
@@ -74,12 +77,6 @@ model Verification {
 
 // ───────────────────────── Tenancy ─────────────────────────
 
-enum Role {
-  OWNER
-  ACCOUNTANT
-  STAFF
-}
-
 model Company {
   id               String    @id @default(cuid())
   legalName        String
@@ -113,6 +110,7 @@ model Company {
 
   memberships   Membership[]
   invitations   Invitation[]
+  roles         CompanyRole[]
   parties       Party[]
   products      Product[]
   numberSeries  NumberSeries[]
@@ -132,13 +130,13 @@ model Company {
 
 /// Business rule: a user belongs to exactly ONE company (any role) — enforced by the unique userId.
 model Membership {
-  id        String   @id @default(cuid())
-  userId    String   @unique
+  id        String           @id @default(cuid())
+  userId    String           @unique
   companyId String
-  role      Role
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roles     MembershipRole[]
 
   @@unique([userId, companyId])
   @@index([companyId])
@@ -149,7 +147,8 @@ model Invitation {
   id         String    @id @default(cuid())
   companyId  String
   email      String
-  role       Role
+  /// CompanyRole ids given on acceptance (one or more).
+  roleIds    Json
   tokenHash  String    @unique
   invitedBy  String
   expiresAt  DateTime
@@ -159,6 +158,86 @@ model Invitation {
 
   @@index([companyId])
   @@map("invitation")
+}
+
+/// Company roles. Built-in roles are global rows (companyId null, key OWNER/ACCOUNTANT/STAFF) whose
+/// permissions live in code (src/lib/permissions.ts); custom roles belong to one company and store theirs.
+model CompanyRole {
+  id          String           @id @db.VarChar(64)
+  companyId   String?
+  key         String?          @db.VarChar(20)
+  name        String           @db.VarChar(60)
+  description String?          @db.VarChar(200)
+  permissions Json?
+  createdAt   DateTime         @default(now())
+  company     Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  members     MembershipRole[]
+
+  @@unique([companyId, name])
+  @@map("company_role")
+}
+
+/// A member can hold several roles; effective permissions are the union.
+model MembershipRole {
+  membershipId String
+  roleId       String      @db.VarChar(64)
+  membership   Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  role         CompanyRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([membershipId, roleId])
+  @@index([roleId])
+  @@map("membership_role")
+}
+
+/// Admin-panel roles. Built-in (key SUPER_ADMIN/SUPPORT/VIEWER) permissions live in code (src/lib/admin.ts).
+model PlatformRole {
+  id          String                   @id @db.VarChar(64)
+  key         String?                  @unique @db.VarChar(20)
+  name        String                   @unique @db.VarChar(60)
+  description String?                  @db.VarChar(200)
+  permissions Json?
+  createdAt   DateTime                 @default(now())
+  users       PlatformRoleAssignment[]
+
+  @@map("platform_role")
+}
+
+model PlatformRoleAssignment {
+  userId    String
+  roleId    String       @db.VarChar(64)
+  createdAt DateTime     @default(now())
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      PlatformRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("platform_role_assignment")
+}
+
+/// What platform admins did (company actions are in audit_log).
+model PlatformAuditLog {
+  id         String   @id @default(cuid())
+  actorId    String
+  actorEmail String   @db.VarChar(191)
+  action     String   @db.VarChar(60)
+  targetType String   @db.VarChar(30)
+  targetId   String?  @db.VarChar(191)
+  data       Json?
+  ip         String?  @db.VarChar(64)
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@map("platform_audit_log")
+}
+
+/// Small key-value store for platform state (e.g. cron last tick).
+model SystemState {
+  key       String   @id @db.VarChar(64)
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@map("system_state")
 }
 
 model AuditLog {
@@ -611,6 +690,7 @@ model OutboxEvent {
 enum PluginKind {
   CODE
   EXTERNAL
+  UPLOADED
 }
 
 enum PluginStatus {
@@ -637,6 +717,10 @@ model Plugin {
   version        String             @db.VarChar(40)
   manifest       Json
   manifestUrl    String?            @db.VarChar(1000)
+  /// UPLOADED: the packed CommonJS bundle (trusted code, see docs/plugins).
+  bundle         String?            @db.LongText
+  bundleSha256   String?            @db.VarChar(64)
+  uploadedBy     String?
   status         PluginStatus       @default(NOT_INSTALLED)
   availability   PluginAvailability @default(NONE)
   /// On for each allowed company until its owner turns it off.

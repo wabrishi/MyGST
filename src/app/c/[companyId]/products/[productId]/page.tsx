@@ -19,7 +19,7 @@ export default async function EditProductPage({ params }: PageProps<"/c/[company
         <ProductForm
           companyId={ctx.companyId}
           id={p.id}
-          canDelete={can(ctx.role, "masters.delete")}
+          canDelete={can(ctx, "masters.delete")}
           initial={{
             name: p.name,
             hsnSac: p.hsnSac,

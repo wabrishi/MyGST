@@ -12,6 +12,7 @@ import { todayIST } from "@/lib/gst/fy";
 import { savePayment } from "@/lib/payments";
 import { gstinCheckChar } from "@/lib/gst/gstin";
 import type { CompanyContext } from "@/lib/tenant";
+import { memberContext } from "./helpers";
 
 /**
  * /api/v1 business logic + outbox events against the real database, with a local HTTP server
@@ -29,8 +30,7 @@ describe("suite API and events", () => {
     const stamp = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
     const user = await db.user.create({ data: { id: `api-${stamp}`, name: "API Tester", email: `api-${stamp}@test.local` } });
     const company = await db.company.create({ data: { legalName: name, stateCode: "27" } });
-    await db.membership.create({ data: { userId: user.id, companyId: company.id, role: "OWNER" } });
-    return { user: { id: user.id, name: user.name, email: user.email }, companyId: company.id, role: "OWNER", company: { id: company.id, legalName: name, tradeName: "", stateCode: "27", gstin: "" } };
+    return memberContext(user, company);
   };
 
   beforeAll(async () => {

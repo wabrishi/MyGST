@@ -1,6 +1,6 @@
 import "server-only";
 import type { CompanyPlugin, Plugin } from "@/generated/prisma/client";
-import type { Role } from "@/generated/prisma/enums";
+import type { BuiltinRoleKey as Role } from "@/lib/permissions";
 import { UserError } from "../action";
 import { decryptSecret } from "../backup/crypto";
 import { db, type Tx } from "../db";
@@ -11,6 +11,7 @@ import { recordFailure, recordSuccess, withTimeout } from "./log";
 import { parseManifest, type PluginFilter, type PluginManifest } from "./manifest";
 import { safeFetch } from "./net";
 import { codePlugin, type CodePlugin } from "./registry";
+import { codeFor } from "./uploaded";
 import type { FilterMap, PluginContext } from "./sdk";
 
 /** Hook execution with isolation: timeouts, error logging, auto-pause. */
@@ -18,8 +19,11 @@ export const FILTER_TIMEOUT_MS = 2_000;
 export const EXTERNAL_FILTER_TIMEOUT_MS = 3_000;
 export const ACTION_TIMEOUT_MS = 30_000;
 
+/** A plugin row without the (large) uploaded bundle. */
+export type PluginRow = Omit<Plugin, "bundle">;
+
 export interface PluginEntry {
-  plugin: Plugin;
+  plugin: PluginRow;
   cp: CompanyPlugin | null;
   manifest: PluginManifest;
   code: CodePlugin | null;
@@ -27,11 +31,11 @@ export interface PluginEntry {
   active: boolean;
 }
 
-/** The manifest in effect: a code plugin's current one (from the build), else the stored one. */
-export function manifestOf(plugin: Plugin): PluginManifest | null {
+/** The manifest in effect: a built-in plugin's current one (from the build), else the stored one. */
+export function manifestOf(plugin: Pick<Plugin, "id" | "kind" | "manifest">): PluginManifest | null {
   if (plugin.kind === "CODE") return codePlugin(plugin.id)?.manifest ?? null;
   try {
-    return parseManifest(plugin.manifest, "EXTERNAL");
+    return parseManifest(plugin.manifest, plugin.kind === "UPLOADED" ? "CODE" : "EXTERNAL");
   } catch {
     return null;
   }
@@ -39,13 +43,15 @@ export function manifestOf(plugin: Plugin): PluginManifest | null {
 
 /** Installed plugins with this company's state (available/active). */
 export async function pluginEntries(companyId: string, tx: Tx | typeof db = db): Promise<PluginEntry[]> {
-  const plugins = await tx.plugin.findMany({ where: { status: "INSTALLED" }, include: { companies: { where: { companyId } } }, orderBy: { name: "asc" } });
+  const plugins = await tx.plugin.findMany({ where: { status: "INSTALLED" }, omit: { bundle: true }, include: { companies: { where: { companyId } } }, orderBy: { name: "asc" } });
   const out: PluginEntry[] = [];
   for (const { companies, ...plugin } of plugins) {
     const manifest = manifestOf(plugin);
     if (!manifest) continue; // code plugin removed or broken
     const cp = companies[0] ?? null;
-    out.push({ plugin, cp, manifest, code: plugin.kind === "CODE" ? codePlugin(plugin.id) : null, available: isAvailableTo(plugin, cp), active: isPluginActive(plugin, cp) });
+    const code = plugin.kind === "EXTERNAL" ? null : await codeFor(plugin);
+    if (plugin.kind === "UPLOADED" && !code) continue; // bundle failed to load (shown in Admin → Plugins)
+    out.push({ plugin, cp, manifest, code, available: isAvailableTo(plugin, cp), active: isPluginActive(plugin, cp) });
   }
   return out;
 }

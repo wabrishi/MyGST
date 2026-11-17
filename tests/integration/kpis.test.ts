@@ -7,6 +7,7 @@ import { savePayment } from "@/lib/payments";
 import { savePurchase } from "@/lib/purchases";
 import { dashboardKpis } from "@/lib/reports/kpis";
 import type { CompanyContext } from "@/lib/tenant";
+import { memberContext } from "./helpers";
 
 /**
  * Builds a small, fully known set of books through the real services and checks every KPI.
@@ -25,13 +26,7 @@ describe("dashboard KPIs", () => {
   beforeAll(async () => {
     const user = await db.user.create({ data: { id: `kpi-${Date.now()}`, name: "KPI Tester", email: `kpi-${Date.now()}@test.local` } });
     const company = await db.company.create({ data: { legalName: "KPI Co", stateCode: "27" } });
-    await db.membership.create({ data: { userId: user.id, companyId: company.id, role: "OWNER" } });
-    ctx = {
-      user: { id: user.id, name: user.name, email: user.email },
-      companyId: company.id,
-      role: "OWNER",
-      company: { id: company.id, legalName: "KPI Co", tradeName: "", stateCode: "27", gstin: "" },
-    };
+    ctx = await memberContext(user, company);
     const reg = await db.party.create({ data: { companyId: company.id, name: "Registered Buyer", gstin: "27AAPFU0939F1ZV", stateCode: "27" } });
     const walkIn = await db.party.create({ data: { companyId: company.id, name: "Walk-in", stateCode: "27" } });
     const supplier = await db.party.create({ data: { companyId: company.id, name: "Supplier", gstin: "27AAPFU0939F1ZV", stateCode: "27", type: "SUPPLIER" } });

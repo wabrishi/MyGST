@@ -11,7 +11,7 @@ const fmt = (d: Date | null) => (d ? d.toLocaleString("en-IN", { timeZone: "Asia
 
 export default async function ApiKeysPage({ params }: PageProps<"/c/[companyId]/settings/api-keys">) {
   const { companyId } = await params;
-  const ctx = await requireCompanyPage(companyId, "company.settings");
+  const ctx = await requireCompanyPage(companyId, "settings.apiKeys");
   const keys = await db.apiKey.findMany({ where: { companyId: ctx.companyId }, orderBy: [{ revokedAt: "asc" }, { createdAt: "desc" }] });
   const creators = new Map(
     (await db.user.findMany({ where: { id: { in: [...new Set(keys.map((k) => k.createdById))] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]),

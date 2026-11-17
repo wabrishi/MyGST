@@ -6,6 +6,7 @@ import { run, UserError, type ActionResult, ok } from "@/lib/action";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { assertNoCompany } from "@/lib/one-company";
+import { holdsOwner, validRoleIds } from "@/lib/roles";
 
 export async function acceptInvite(token: string): Promise<ActionResult<{ companyId: string; toSetup: boolean }>> {
   const user = await requireUser();
@@ -19,16 +20,19 @@ export async function acceptInvite(token: string): Promise<ActionResult<{ compan
       // Mark used first (conditional update) so a token can't be redeemed twice concurrently.
       const used = await tx.invitation.updateMany({ where: { id: invite.id, acceptedAt: null }, data: { acceptedAt: new Date() } });
       if (used.count !== 1) throw new UserError("Invitation already used");
-      await tx.membership.upsert({
-        where: { userId_companyId: { userId: user.id, companyId: invite.companyId } },
-        create: { userId: user.id, companyId: invite.companyId, role: invite.role },
-        update: {},
+      // Roles may have been deleted since the invite was sent: then the invite can't be used.
+      const roleIds = await validRoleIds(invite.companyId, invite.roleIds, tx).catch(() => {
+        throw new UserError("The role in this invitation no longer exists. Ask for a new invitation.");
       });
+      const existing = await tx.membership.findUnique({ where: { userId_companyId: { userId: user.id, companyId: invite.companyId } } });
+      if (!existing) {
+        await tx.membership.create({ data: { userId: user.id, companyId: invite.companyId, roles: { create: roleIds.map((roleId) => ({ roleId })) } } });
+      }
       await tx.auditLog.create({
         data: { companyId: invite.companyId, userId: user.id, action: "accept", entity: "invitation", entityId: invite.id },
       });
       const company = await tx.company.findUniqueOrThrow({ where: { id: invite.companyId }, select: { setupCompletedAt: true } });
-      return { companyId: invite.companyId, toSetup: invite.role === "OWNER" && !company.setupCompletedAt };
+      return { companyId: invite.companyId, toSetup: holdsOwner(roleIds) && !company.setupCompletedAt };
     });
     return ok(companyId);
   });

@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   // Local verification of what a traced deployment contains: NEXT_OUTPUT=standalone npm run build
   ...(process.env.NEXT_OUTPUT === "standalone" ? { output: "standalone" as const } : {}),
   experimental: {
-    serverActions: { bodySizeLimit: "2mb" }, // logo upload
+    serverActions: { bodySizeLimit: "3mb" }, // logo upload; plugin bundles (≤ 2 MB) plus form overhead
     // By default Next.js starts (CPU cores − 1) build workers — 56 on Hostinger's build machines, far beyond
     // the plan's process/memory limits (the build dies with SIGABRT). One worker is plenty for this app;
     // raise with BUILD_CPUS on a bigger server.

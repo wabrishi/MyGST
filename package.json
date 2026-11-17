@@ -17,7 +17,8 @@
     "test:e2e": "playwright test",
     "start:app": "next start",
     "plugins:sync": "node scripts/plugins-sync.mjs",
-    "plugin:new": "node scripts/new-plugin.mjs"
+    "plugin:new": "node scripts/new-plugin.mjs",
+    "plugin:pack": "node scripts/pack-plugin.mjs"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.10.1",
@@ -44,6 +45,7 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "postcss": "^8.5.32",

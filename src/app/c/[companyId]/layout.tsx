@@ -1,11 +1,11 @@
 import { AlertTriangle, Plus } from "lucide-react";
 import { Logo } from "@/components/brand";
 import { Avatar, ButtonLink } from "@/components/ui";
-import { isSuperAdmin } from "@/lib/admin";
+import { hasAdminAccess } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { availableFys, getSelectedFy } from "@/lib/fy-context";
 import { financialYear, todayIST } from "@/lib/gst/fy";
-import { ROLE_LABEL, can } from "@/lib/permissions";
+import { can, roleNames } from "@/lib/permissions";
 import { pluginNav } from "@/lib/plugins/ui";
 import { requireCompany } from "@/lib/tenant";
 import { FySwitcher } from "./fy-switcher";
@@ -26,6 +26,7 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
   const notCurrent = selectedFy !== financialYear(todayIST());
   const companyName = ctx.company.tradeName || ctx.company.legalName;
   const home = `/c/${companyId}/dashboard`;
+  const perms = [...ctx.permissions];
 
   const companyCard = (
     <div className="mx-3 mb-5 flex items-center gap-2.5 rounded-xl border border-border bg-surface-2 px-3 py-2.5" title={ctx.company.legalName}>
@@ -45,21 +46,21 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
           <Logo href={home} />
         </div>
         {companyCard}
-        <SideNav companyId={companyId} role={ctx.role} apps={apps} />
+        <SideNav companyId={companyId} perms={perms} apps={apps} />
         <div className="mt-auto px-5 pb-5 pt-6 text-[11px] text-muted">GST-ready billing · FY 20{selectedFy}</div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="no-print sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-surface/85 px-4 backdrop-blur-md md:px-6">
-          <MobileNav header={<Logo href={home} />} top={companyCard} companyId={companyId} role={ctx.role} apps={apps} />
+          <MobileNav header={<Logo href={home} />} top={companyCard} companyId={companyId} perms={perms} apps={apps} />
           <div className="sm:hidden">
             <Logo href={home} size={24} />
           </div>
           <Breadcrumbs companyId={companyId} />
           <div className="ml-auto flex items-center gap-2">
             <FySwitcher companyId={companyId} fys={fys} selected={selectedFy} lockedUntil={lockedUntil} />
-            {can(ctx.role, "docs.create") && (
+            {can(ctx, "docs.create") && (
               <ButtonLink href={`/c/${companyId}/invoices/new`} size="sm" className="hidden sm:inline-flex">
                 <Plus size={15} /> New invoice
               </ButtonLink>
@@ -67,10 +68,10 @@ export default async function CompanyLayout({ children, params }: LayoutProps<"/
             <UserMenu
               name={ctx.user.name}
               email={ctx.user.email}
-              roleLabel={ROLE_LABEL[ctx.role]}
+              roleLabel={roleNames(ctx.roles)}
               companyId={companyId}
-              isOwner={can(ctx.role, "company.settings")}
-              isSuperAdmin={isSuperAdmin(ctx.user)}
+              isOwner={can(ctx, "company.settings")}
+              isSuperAdmin={await hasAdminAccess(ctx.user)}
             />
           </div>
         </header>

@@ -12,7 +12,7 @@ export const metadata = { title: "Payment" };
 
 export default async function PaymentPage({ params }: PageProps<"/c/[companyId]/payments/[paymentId]">) {
   const { companyId, paymentId } = await params;
-  const ctx = await requireCompanyPage(companyId, "payments.write");
+  const ctx = await requireCompanyPage(companyId, "payments.view");
   const p = await db.payment.findFirst({
     where: { id: paymentId, companyId: ctx.companyId },
     include: {

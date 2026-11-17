@@ -20,7 +20,7 @@ export default async function PurchaseViewPage({ params }: PageProps<"/c/[compan
   const b = await loadPurchase(ctx.companyId, billId);
   if (!b) notFound();
   const base = `/c/${ctx.companyId}`;
-  const writable = can(ctx.role, "purchases.write") && !b.cancelled;
+  const writable = can(ctx, "purchases.write") && !b.cancelled;
 
   return (
     <>
@@ -35,7 +35,7 @@ export default async function PurchaseViewPage({ params }: PageProps<"/c/[compan
         actions={
           writable && (
             <div className="flex gap-2">
-              {b.balance > 0 && can(ctx.role, "payments.write") && <ButtonLink href={`${base}/payments/new?bill=${b.id}`}>Record payment</ButtonLink>}
+              {b.balance > 0 && can(ctx, "payments.write") && <ButtonLink href={`${base}/payments/new?bill=${b.id}`}>Record payment</ButtonLink>}
               <ButtonLink variant="secondary" href={`${base}/purchases/${b.id}/edit`}>
                 Edit
               </ButtonLink>

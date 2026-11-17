@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { Role } from "@/generated/prisma/enums";
+import type { BuiltinRoleKey as Role } from "@/lib/permissions";
 import { UserError } from "../user-error";
 import type { ManifestInput, PluginEvent, PluginFilter } from "./manifest";
 

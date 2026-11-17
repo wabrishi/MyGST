@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { BackupPanel } from "@/components/backup-panel";
 import { Badge, Card, PageHeader, Table, Td, Th } from "@/components/ui";
+import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { redirectUri } from "@/lib/backup/google-drive";
 
 export const metadata = { title: "Backups" };
 
 export default async function AdminBackupsPage({ searchParams }: PageProps<"/admin/backups">) {
+  await requireAdmin("backups.manage");
   const sp = await searchParams;
   const companyTargets = await db.backupTarget.findMany({
     where: { scope: "COMPANY" },

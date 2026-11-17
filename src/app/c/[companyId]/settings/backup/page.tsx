@@ -6,7 +6,7 @@ export const metadata = { title: "Backup" };
 
 export default async function CompanyBackupPage({ params, searchParams }: PageProps<"/c/[companyId]/settings/backup">) {
   const { companyId } = await params;
-  const ctx = await requireCompanyPage(companyId, "company.settings");
+  const ctx = await requireCompanyPage(companyId, "settings.backups");
   const sp = await searchParams;
   return (
     <div className="flex flex-col gap-4">
