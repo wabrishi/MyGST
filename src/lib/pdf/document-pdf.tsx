@@ -289,3 +289,6 @@ export function DocumentPdf({ doc, logo, extra = [] }: { doc: LoadedDocument; lo
 export async function renderDocumentPdf(doc: LoadedDocument, logo: { data: Buffer; mime: string } | null, extra: PdfExtraSection[] = []) {
   return renderToBuffer(<DocumentPdf doc={doc} logo={logo} extra={extra} />);
 }
+
+/** Shared with other PDFs (purchase orders) so they look the same. */
+export { BORDER, FONTS as PDF_FONTS, KV, amt, dmy, s as pdfStyles };

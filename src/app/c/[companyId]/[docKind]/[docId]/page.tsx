@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, Card, PageHeader, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
-import { DOC_KINDS, isDocKind, kindOfType } from "@/lib/doc-kinds";
+import { DOC_KINDS, isDocKind, kindOfType, salesType } from "@/lib/doc-kinds";
 import { canEditDoc, loadDocument, paymentStatus } from "@/lib/documents";
 import { formatINR } from "@/lib/gst/calc";
 import { creditNoteDeadline, todayIST } from "@/lib/gst/fy";
@@ -109,7 +109,7 @@ export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/
               )}
             </dl>
           </Card>
-          <PluginDocumentPanel ctx={ctx} doc={toSummary(doc)} />
+          <PluginDocumentPanel ctx={ctx} doc={toSummary({ ...doc, type: salesType(doc.type) })} />
 
           {doc.payments.length > 0 && (
             <Card>

@@ -25,7 +25,7 @@ export default async function PurchaseRegisterPage({ params, searchParams }: Pag
             <thead>
               <tr>
                 <Th>Date</Th>
-                <Th>Bill no.</Th>
+                <Th>Invoice no.</Th>
                 <Th>Supplier</Th>
                 <Th>GSTIN</Th>
                 <Th>ITC</Th>

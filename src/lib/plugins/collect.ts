@@ -1,5 +1,5 @@
 import { parseManifest, type PluginEvent, type PluginFilter, type PluginManifest } from "./manifest";
-import type { ActionHandler, LifecycleHandlers, PageComponent, PluginApi, PluginDefinition, RouteHandler, WidgetComponent } from "./sdk";
+import type { ActionHandler, FormActionHandler, JobHandler, LifecycleHandlers, PageComponent, PluginApi, PluginDefinition, RouteHandler, WidgetComponent } from "./sdk";
 
 /** Runs a plugin's setup() against a collector and returns its validated manifest + hooks. Pure (no database). */
 type Prioritized<T> = { handler: T; priority: number };
@@ -12,14 +12,22 @@ export interface CollectedPlugin {
   pages: Map<string, PageComponent>;
   widgets: Map<string, WidgetComponent>;
   settingsPage: PageComponent | null;
-  routes: Array<{ method: string; path: string; handler: RouteHandler; public: boolean; roles: string[] | null }>;
+  routes: Array<{ method: string; path: string; handler: RouteHandler; public: boolean; roles: string[] | null; permission: string | null }>;
+  /** <ActionForm> handlers (api.action). */
+  formActions: Map<string, { handler: FormActionHandler; permission: string | null }>;
+  /** Scheduled jobs (api.schedule), keyed by manifest.jobs id. */
+  jobs: Map<string, JobHandler>;
   lifecycle: LifecycleHandlers;
 }
 
 export function collectPlugin(definition: PluginDefinition, folder?: string): CollectedPlugin {
   const manifest = parseManifest(definition?.manifest, "CODE");
   if (folder && manifest.id !== folder) throw new Error(`manifest id "${manifest.id}" must match the folder name "${folder}"`);
-  const p: CollectedPlugin = { manifest, actions: new Map(), filters: new Map(), pages: new Map(), widgets: new Map(), settingsPage: null, routes: [], lifecycle: {} };
+  const p: CollectedPlugin = { manifest, actions: new Map(), filters: new Map(), pages: new Map(), widgets: new Map(), settingsPage: null, routes: [], formActions: new Map(), jobs: new Map(), lifecycle: {} };
+  const capability = (where: string, key: string | undefined) => {
+    if (key && !manifest.capabilities.some((c) => c.key === key)) throw new Error(`${where}: permission "${key}" is not declared in manifest.capabilities`);
+    return key ?? null;
+  };
   const push = <K, T>(map: Map<K, Array<Prioritized<T>>>, key: K, handler: T, priority = 10) => {
     const list = map.get(key) ?? [];
     list.push({ handler, priority });
@@ -49,7 +57,16 @@ export function collectPlugin(definition: PluginDefinition, folder?: string): Co
     route(method, path, handler, opts) {
       const clean = path.replace(/^\/+|\/+$/g, "");
       if (!/^[a-z0-9][a-z0-9/_*-]*$/i.test(clean)) throw new Error(`api.route path "${path}" may only use letters, digits, / _ - (and a trailing /*)`);
-      p.routes.push({ method, path: clean, handler, public: !!opts?.public, roles: opts?.roles ?? null });
+      p.routes.push({ method, path: clean, handler, public: !!opts?.public, roles: opts?.roles ?? null, permission: capability(`api.route("${path}")`, opts?.permission) });
+    },
+    action(name, handler, opts) {
+      if (!/^[a-zA-Z][a-zA-Z0-9_-]{0,60}$/.test(name)) throw new Error(`api.action("${name}"): names are letters, digits, _ and -`);
+      if (p.formActions.has(name)) throw new Error(`api.action("${name}") is registered twice`);
+      p.formActions.set(name, { handler, permission: capability(`api.action("${name}")`, opts?.permission) });
+    },
+    schedule(jobId, handler) {
+      if (!manifest.jobs.some((j) => j.id === jobId)) throw new Error(`api.schedule("${jobId}"): declare it in manifest.jobs`);
+      p.jobs.set(jobId, handler);
     },
     lifecycle(handlers) {
       p.lifecycle = { ...p.lifecycle, ...handlers };
@@ -58,5 +75,6 @@ export function collectPlugin(definition: PluginDefinition, folder?: string): Co
   definition.setup(api);
   for (const pg of manifest.pages) if (!p.pages.has(pg.slug)) throw new Error(`manifest.pages "${pg.slug}" has no api.page() component`);
   for (const w of manifest.widgets) if (!p.widgets.has(w.id)) throw new Error(`manifest.widgets "${w.id}" has no api.widget() component`);
+  for (const j of manifest.jobs) if (!p.jobs.has(j.id)) throw new Error(`manifest.jobs "${j.id}" has no api.schedule() handler`);
   return p;
 }

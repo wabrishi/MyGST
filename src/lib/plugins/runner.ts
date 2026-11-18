@@ -58,14 +58,18 @@ export async function pluginEntries(companyId: string, tx: Tx | typeof db = db):
 
 export const activeEntries = async (companyId: string, tx: Tx | typeof db = db) => (await pluginEntries(companyId, tx)).filter((e) => e.active);
 
-export function contextFor(e: PluginEntry, companyId: string, user?: { id: string; name: string; email: string } | null, role?: Role | null): Promise<PluginContext> {
-  return buildPluginContext({ pluginId: e.plugin.id, manifest: e.manifest, companyId, settings: e.cp?.settings, user, role, actingUserId: e.cp?.enabledBy });
+/** The signed-in member's roles and permissions (a CompanyContext fits), for ctx.can(). */
+export type MemberGrants = { roles: Array<{ key: string | null }>; permissions: ReadonlySet<string> };
+
+export function contextFor(e: PluginEntry, companyId: string, user?: { id: string; name: string; email: string } | null, role?: Role | null, member?: MemberGrants | null): Promise<PluginContext> {
+  return buildPluginContext({ pluginId: e.plugin.id, manifest: e.manifest, companyId, settings: e.cp?.settings, user, role, member, actingUserId: e.cp?.enabledBy });
 }
 
 export interface HookScope {
   companyId: string;
   user?: { id: string; name: string; email: string } | null;
   role?: Role | null;
+  member?: MemberGrants | null;
 }
 
 /**
@@ -80,7 +84,7 @@ export async function applyFilters<F extends PluginFilter>(scope: HookScope, nam
     if (e.code) {
       const handlers = e.code.filters.get(name) ?? [];
       if (!handlers.length) continue;
-      const ctx = await contextFor(e, scope.companyId, scope.user, scope.role);
+      const ctx = await contextFor(e, scope.companyId, scope.user, scope.role, scope.member);
       for (const { handler } of handlers) {
         try {
           const fn = handler as unknown as (v: typeof current, a: typeof args, c: PluginContext) => typeof current | Promise<typeof current>;

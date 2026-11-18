@@ -56,7 +56,7 @@ export async function GET(request: Request, { params }: RouteContext<"/c/[compan
       const rows = await purchaseRegister(ctx.companyId, from, to);
       csv = toCsv(rows, [
         { header: "Date", value: (r) => gstDate(r.date) },
-        { header: "Bill number", value: (r) => r.number },
+        { header: "Invoice number", value: (r) => r.number },
         { header: "Supplier", value: (r) => r.party },
         { header: "GSTIN", value: (r) => r.gstin },
         { header: "ITC", value: (r) => r.itc },

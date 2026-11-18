@@ -1,5 +1,5 @@
 import { Badge, Card, CardHeader } from "@/components/ui";
-import { PERMISSION_GROUPS, PERMISSION_LABEL, rolePermissions, storedPermissions, type CorePermission } from "@/lib/permissions";
+import { holdsGrantable, PERMISSION_GROUPS, PERMISSION_LABEL, pluginPermission, rolePermissions, storedPermissions, type CorePermission } from "@/lib/permissions";
 import { activeEntries } from "@/lib/plugins/runner";
 import { companyRoles } from "@/lib/roles";
 import { requireCompanyPage } from "@/lib/tenant";
@@ -16,11 +16,16 @@ export default async function RolesPage({ params }: PageProps<"/c/[companyId]/se
   const appItems = apps
     .filter((e) => e.manifest.pages.length || e.manifest.widgets.length)
     .map((e) => [`app:${e.plugin.id}`, `Use ${e.manifest.name}`] as const);
-  const groups = [...PERMISSION_GROUPS.map((g) => ({ label: g.label, items: g.items })), ...(appItems.length ? [{ label: "Apps", items: appItems }] : [])]
+  // Each plugin's own permissions (manifest `capabilities`) get a group named after the plugin.
+  const pluginGroups = apps
+    .filter((e) => e.manifest.capabilities.length)
+    .map((e) => ({ label: e.manifest.name, items: e.manifest.capabilities.map((c) => [pluginPermission(e.plugin.id, c.key), c.label] as const) }));
+  const capabilities = new Map(apps.map((e) => [e.plugin.id, e.manifest.capabilities]));
+  const groups = [...PERMISSION_GROUPS.map((g) => ({ label: g.label, items: g.items })), ...(appItems.length ? [{ label: "Apps", items: appItems }] : []), ...pluginGroups]
     // Only offer permissions this member holds (no privilege escalation).
-    .map((g) => ({ label: g.label, items: g.items.filter(([k]) => ctx.permissions.has(k as CorePermission)) }))
+    .map((g) => ({ label: g.label, items: g.items.filter(([k]) => holdsGrantable(ctx, k, capabilities)) }))
     .filter((g) => g.items.length);
-  const appLabel = new Map<string, string>(appItems.map(([k, l]) => [k, l]));
+  const appLabel = new Map<string, string>([...appItems, ...pluginGroups.flatMap((g) => g.items.map(([k, l]) => [k, `${g.label}: ${l}`] as const))].map(([k, l]) => [k, l]));
   const label = (p: string) => PERMISSION_LABEL[p as CorePermission] ?? appLabel.get(p) ?? p;
 
   return (

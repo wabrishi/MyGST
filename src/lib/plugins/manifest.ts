@@ -14,8 +14,11 @@ export const PLUGIN_PERMISSIONS = {
   "parties:write": "Create and update customers and suppliers",
   "products:read": "Read products and services",
   "payments:read": "Read payments and outstanding balances",
-  "purchases:read": "Read purchase bills",
+  "products:write": "Add custom fields to products (e.g. stock on hand)",
+  "purchases:read": "Read purchase invoices",
+  "purchaseOrders:read": "Read purchase orders",
   "reports:read": "Read GST reports and dashboards",
+  "mail:send": "Send emails to company members and to customers/suppliers",
 } as const;
 export type PluginPermission = keyof typeof PLUGIN_PERMISSIONS;
 const permissionKeys = Object.keys(PLUGIN_PERMISSIONS) as [PluginPermission, ...PluginPermission[]];
@@ -24,13 +27,17 @@ const permissionKeys = Object.keys(PLUGIN_PERMISSIONS) as [PluginPermission, ...
 export const PLUGIN_EVENTS = {
   "invoice.issued": "An invoice was created",
   "invoice.cancelled": "An invoice was cancelled",
+  "document.updated": "An invoice, quotation or note was edited",
   "quotation.created": "A quotation was created",
   "quotation.converted": "A quotation was converted to an invoice",
   "credit_note.issued": "A credit note was created",
   "debit_note.issued": "A debit note was created",
   "payment.received": "A payment was received from a customer",
   "payment.paid": "A payment was made to a supplier",
-  "purchase.saved": "A purchase bill was created or edited",
+  "purchase.saved": "A purchase invoice was created or edited",
+  "purchase.cancelled": "A purchase invoice was cancelled",
+  "purchase_order.saved": "A purchase order was created or edited",
+  "purchase_order.cancelled": "A purchase order was cancelled",
   "party.saved": "A customer or supplier was created or edited",
   "product.saved": "A product was created or edited",
   "company.updated": "Company settings were changed",
@@ -42,6 +49,7 @@ const eventKeys = Object.keys(PLUGIN_EVENTS) as [PluginEvent, ...PluginEvent[]];
 export const EVENT_PERMISSION: Record<PluginEvent, PluginPermission> = {
   "invoice.issued": "documents:read",
   "invoice.cancelled": "documents:read",
+  "document.updated": "documents:read",
   "quotation.created": "documents:read",
   "quotation.converted": "documents:read",
   "credit_note.issued": "documents:read",
@@ -49,6 +57,9 @@ export const EVENT_PERMISSION: Record<PluginEvent, PluginPermission> = {
   "payment.received": "payments:read",
   "payment.paid": "payments:read",
   "purchase.saved": "purchases:read",
+  "purchase.cancelled": "purchases:read",
+  "purchase_order.saved": "purchaseOrders:read",
+  "purchase_order.cancelled": "purchaseOrders:read",
   "party.saved": "parties:read",
   "product.saved": "products:read",
   "company.updated": "company:read",
@@ -91,6 +102,21 @@ const settingField = z
   .refine((f) => f.type !== "select" || (f.options?.length ?? 0) > 0, { message: "select settings need options" });
 
 const roles = z.array(z.enum(ROLES)).min(1).default(["OWNER", "ACCOUNTANT", "STAFF"]);
+const fieldName = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_]{0,40}$/, "Field names are letters, digits and _");
+/** A plugin-defined permission key, e.g. "leads.manage". */
+const capabilityKey = z.string().regex(/^[a-z][a-zA-Z0-9_]*(?:\.[a-z][a-zA-Z0-9_]*){0,2}$/, 'Capability keys look like "leads.manage"').max(60);
+
+/** Limits for plugin data tables (see records.ts). */
+export const MAX_STRING_INDEXES = 4;
+export const MAX_NUMBER_FIELDS = 2;
+
+const collection = z.object({
+  name: z.string().regex(/^[a-z][a-z0-9_]{0,40}$/, "Collection names are lowercase letters, digits and _"),
+  /** Text fields you filter or sort on (stored in indexed columns, max 191 characters each). */
+  indexes: z.array(fieldName).max(MAX_STRING_INDEXES).default([]),
+  /** Number fields you filter, sort or sum on. */
+  numbers: z.array(fieldName).max(MAX_NUMBER_FIELDS).default([]),
+});
 
 export const manifestSchema = z.object({
   id: slug,
@@ -107,10 +133,32 @@ export const manifestSchema = z.object({
   events: z.array(z.enum(eventKeys)).max(30).default([]),
   filters: z.array(z.enum(PLUGIN_FILTERS)).max(10).default([]),
   pages: z
-    .array(z.object({ slug, title: z.string().min(1).max(40), icon: z.string().max(40).optional(), roles, inNav: z.boolean().default(true) }))
-    .max(10)
+    .array(
+      z.object({
+        slug,
+        title: z.string().min(1).max(40),
+        icon: z.string().max(40).optional(),
+        roles,
+        inNav: z.boolean().default(true),
+        /** A capability (see `capabilities`) needed to open the page. */
+        permission: capabilityKey.optional(),
+      }),
+    )
+    .max(20)
     .default([]),
-  widgets: z.array(z.object({ id: slug, title: z.string().min(1).max(60), roles, width: z.enum(["third", "half", "full"]).default("third") })).max(5).default([]),
+  widgets: z
+    .array(z.object({ id: slug, title: z.string().min(1).max(60), roles, width: z.enum(["third", "half", "full"]).default("third"), permission: capabilityKey.optional() }))
+    .max(5)
+    .default([]),
+  /** Plugin data tables: records per company with indexed fields (ctx.db.collection(name)). */
+  collections: z.array(collection).max(10).default([]),
+  /**
+   * The plugin's own permissions. They appear in Settings → Roles; `roles` are the built-in roles that
+   * hold them by default (owners always do). Check with ctx.can(key) or a page/action `permission`.
+   */
+  capabilities: z.array(z.object({ key: capabilityKey, label: z.string().min(1).max(80), roles: z.array(z.enum(ROLES)).default(["OWNER"]) })).max(30).default([]),
+  /** Scheduled jobs (api.schedule) run by the cron tick for every company where the plugin is active. */
+  jobs: z.array(z.object({ id: slug, every: z.enum(["hourly", "daily"]), title: z.string().max(80).optional() })).max(10).default([]),
   // ── External plugins only ──
   /** Receives lifecycle + subscribed events (signed POSTs). */
   webhookUrl: pluginUrl.optional(),
@@ -142,6 +190,19 @@ export function parseManifest(raw: unknown, kind: "CODE" | "EXTERNAL"): PluginMa
   }
   const keys = m.settings.map((s) => s.key);
   if (new Set(keys).size !== keys.length) problems.push("setting keys must be unique");
+  const unique = (what: string, list: string[]) => {
+    if (new Set(list).size !== list.length) problems.push(`${what} must be unique`);
+  };
+  unique("page slugs", m.pages.map((p) => p.slug));
+  unique("collection names", m.collections.map((c) => c.name));
+  unique("capability keys", m.capabilities.map((c) => c.key));
+  unique("job ids", m.jobs.map((j) => j.id));
+  for (const c of m.collections) unique(`fields of collection "${c.name}"`, [...c.indexes, ...c.numbers]);
+  const caps = new Set(m.capabilities.map((c) => c.key));
+  for (const x of [...m.pages, ...m.widgets]) {
+    if (x.permission && !caps.has(x.permission)) problems.push(`permission "${x.permission}" is not declared in capabilities`);
+  }
+  if (kind === "EXTERNAL" && (m.collections.length || m.jobs.length)) problems.push("collections and jobs are for code plugins only");
   if (problems.length) {
     throw new z.ZodError(problems.map((message) => ({ code: "custom", message, path: [], input: raw })));
   }

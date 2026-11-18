@@ -38,16 +38,16 @@ test("payments, purchases/ITC, reports, FY lock, roles and tenant isolation", as
     await expect(page.getByText("Paid", { exact: true })).toBeVisible();
   });
 
-  await test.step("purchase bill feeds ITC into GSTR-3B", async () => {
+  await test.step("purchase invoice feeds ITC into GSTR-3B", async () => {
     await page.goto(`${base}/purchases/new`);
     await settled(page);
     const sup = page.getByRole("combobox", { name: "Supplier" });
     const labels = await sup.locator("option").allTextContents();
     await sup.selectOption({ label: labels.find((l) => l.startsWith("Supply Co"))! });
-    await page.getByLabel("Supplier bill no.").fill("S-101");
+    await page.getByLabel("Supplier invoice no.").fill("S-101");
     await page.getByRole("combobox", { name: "Line 1 product" }).selectOption({ label: "Gadget" });
     await page.getByRole("spinbutton", { name: "Line 1 rate" }).fill("500");
-    await page.getByRole("button", { name: "Save bill" }).click();
+    await page.getByRole("button", { name: "Save purchase invoice" }).click();
     await page.waitForURL(/\/purchases\/(?!new)[^/]+$/);
     expect(await summaryValue(page, "Total")).toBe("₹590.00");
 

@@ -19,7 +19,7 @@ const FEATURES: Array<{ icon: LucideIcon; title: string; text: string }> = [
   { icon: FileText, title: "GST-compliant invoices", text: "CGST + SGST/UTGST or IGST chosen from the place of supply. Gap-free numbering per financial year, A4 PDF and email." },
   { icon: ScrollText, title: "Quotations & notes", text: "Convert quotations into invoices in one click. Issue credit and debit notes against the original invoice." },
   { icon: ReceiptIndianRupee, title: "Payments & outstanding", text: "Record receipts, allocate them across invoices and track ageing — 0–30, 31–60, 61–90 and 90+ days." },
-  { icon: ShoppingCart, title: "Purchases & ITC", text: "Capture supplier bills with eligible, capital-goods or blocked input tax credit and reverse charge." },
+  { icon: ShoppingCart, title: "Purchases & ITC", text: "Raise purchase orders, then record supplier invoices against them with eligible, capital-goods or blocked input tax credit." },
   { icon: BarChart3, title: "GSTR-1 & GSTR-3B", text: "B2B, B2CL, B2CS, CDNR, HSN summary and documents issued, exported in the offline-tool CSV format." },
   { icon: CalendarCheck2, title: "Financial-year control", text: "Switch between years in one click and close a year once returns are filed so nothing changes later." },
   { icon: Users, title: "Team roles", text: "Invite your accountant and staff as Owner, Accountant or Staff with the right level of access." },

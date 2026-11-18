@@ -20,6 +20,8 @@ export interface PurchaseFormInitial {
   pricesIncludeTax: boolean;
   notes: string;
   items: LineValues[];
+  /** Billing a purchase order: its id and number (lines carry the PO line in sourceId). */
+  purchaseOrder?: { id: string; number: string } | null;
 }
 
 export function PurchaseForm({
@@ -60,14 +62,24 @@ export function PurchaseForm({
           itcType: String(f.get("itcType")) as PurchaseFormInitial["itcType"],
           pricesIncludeTax: inclusive,
           notes: String(f.get("notes")),
+          purchaseOrderId: initial.purchaseOrder?.id ?? "",
           items: linesForSubmit(lines),
         });
       }}
     >
       {error && <Alert>{error}</Alert>}
+      {initial.purchaseOrder && (
+        <Alert kind="info">
+          Billing purchase order{" "}
+          <Link href={`/c/${companyId}/purchase-orders/${initial.purchaseOrder.id}`} className="font-semibold underline underline-offset-2">
+            {initial.purchaseOrder.number}
+          </Link>
+          . Lines from the order show how much is left to bill; change the quantities to what this invoice covers.
+        </Alert>
+      )}
       <Card className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Supplier" required error={fe.partyId} className="sm:col-span-2">
-          <Select value={partyId} onChange={(e) => setPartyId(e.target.value)} required>
+          <Select value={partyId} onChange={(e) => setPartyId(e.target.value)} required disabled={!!initial.purchaseOrder}>
             <option value="">Select supplier…</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>
@@ -80,10 +92,10 @@ export function PurchaseForm({
             + Add supplier (then reload)
           </Link>
         </Field>
-        <Field label="Supplier bill no." required error={fe.billNumber}>
+        <Field label="Supplier invoice no." required error={fe.billNumber}>
           <Input name="billNumber" defaultValue={initial.billNumber} required maxLength={30} />
         </Field>
-        <Field label="Bill date" required error={fe.billDate}>
+        <Field label="Invoice date" required error={fe.billDate}>
           <Input type="date" name="billDate" defaultValue={initial.billDate} required />
         </Field>
         <Field label="Place of supply" required error={fe.placeOfSupply} hint={supplier ? (interstate ? "Inter-state → IGST" : "Intra-state → CGST + SGST") : undefined}>
@@ -127,7 +139,7 @@ export function PurchaseForm({
         </Card>
         <TotalsCard totals={totals} interstate={interstate} sgstLabel={sgstLabel(pos)}>
           <Button className="mt-4 w-full" disabled={pending}>
-            {pending ? "Saving…" : billId ? "Save changes" : "Save bill"}
+            {pending ? "Saving…" : billId ? "Save changes" : "Save purchase invoice"}
           </Button>
         </TotalsCard>
       </div>

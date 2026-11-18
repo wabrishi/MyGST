@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { DOC_KINDS, isDocKind } from "@/lib/doc-kinds";
+import { DOC_KINDS, isDocKind, salesType } from "@/lib/doc-kinds";
 import { loadDocument } from "@/lib/documents";
 import { renderDocumentPdf, type PdfExtraSection } from "@/lib/pdf/document-pdf";
 import { activeEntries, applyFilters } from "@/lib/plugins/runner";
@@ -63,8 +63,8 @@ async function pluginSections(ctx: Awaited<ReturnType<typeof requireCompany>>, d
   try {
     const entries = await activeEntries(ctx.companyId);
     if (!entries.some((e) => e.manifest.filters.includes("pdf.sections"))) return sections;
-    const summary = { id: doc.id, type: doc.type, number: doc.number, date: doc.date, status: doc.status, partyId: doc.partyId, partyName: doc.partyName, partyGstin: doc.partyGstin, total: doc.grandTotal / 100, customFields: doc.customFields };
-    const added = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role }, "pdf.sections", [], { document: summary });
+    const summary = { id: doc.id, type: salesType(doc.type), number: doc.number, date: doc.date, status: doc.status, partyId: doc.partyId, partyName: doc.partyName, partyGstin: doc.partyGstin, total: doc.grandTotal / 100, customFields: doc.customFields };
+    const added = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx }, "pdf.sections", [], { document: summary });
     for (const sec of added.slice(0, 5)) {
       if (!sec || !Array.isArray(sec.lines)) continue;
       sections.push({ title: sec.title ? String(sec.title).slice(0, 60) : undefined, lines: sec.lines.slice(0, 10).map((l) => String(l).slice(0, 300)) });

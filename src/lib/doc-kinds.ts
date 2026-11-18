@@ -10,6 +10,10 @@ export const DOC_KINDS = {
 
 export type DocKind = keyof typeof DOC_KINDS;
 
+/** Types a sales `document` row can have (PURCHASE_ORDER only names a number series). */
+export type SalesDocType = Exclude<DocType, "PURCHASE_ORDER">;
+export const salesType = (t: DocType) => t as SalesDocType;
+
 export const isDocKind = (s: string): s is DocKind => s in DOC_KINDS;
 
 export const kindOfType = (t: DocType): DocKind =>

@@ -14,7 +14,7 @@ import { selectedFyRange } from "@/lib/fy-context";
 import { rangeFrom } from "@/lib/range";
 import { requireCompanyPage } from "@/lib/tenant";
 
-export const metadata = { title: "Purchases" };
+export const metadata = { title: "Purchase invoices" };
 
 export default async function PurchasesPage({ params, searchParams }: PageProps<"/c/[companyId]/purchases">) {
   const { companyId } = await params;
@@ -45,22 +45,22 @@ export default async function PurchasesPage({ params, searchParams }: PageProps<
   return (
     <>
       <PageHeader
-        title="Purchases"
+        title="Purchase invoices"
         subtitle={`${formatINR(toPaise(sums._sum.grandTotal?.toNumber() ?? 0))} purchases · ${formatINR(itc)} GST paid`}
-        actions={can(ctx, "purchases.write") && <ButtonLink href={`${base}/new`}>+ New purchase bill</ButtonLink>}
+        actions={can(ctx, "purchases.write") && <ButtonLink href={`${base}/new`}>+ New purchase invoice</ButtonLink>}
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        <SearchBox placeholder="Search bill no., supplier, GSTIN" />
+        <SearchBox placeholder="Search invoice no., supplier, GSTIN" />
         <DateRangeFilter from={from} to={to} fy={fy} />
       </div>
       <Card>
         {rows.length === 0 ? (
-          <Empty icon={ShoppingCart} title="No purchase bills in this period">Record supplier bills to track payables and input tax credit.</Empty>
+          <Empty icon={ShoppingCart} title="No purchase invoices in this period">Record supplier invoices to track payables and input tax credit.</Empty>
         ) : (
           <Table>
             <thead>
               <tr>
-                <Th>Bill no.</Th>
+                <Th>Invoice no.</Th>
                 <Th>Date</Th>
                 <Th>Supplier</Th>
                 <Th className="text-right">Taxable</Th>

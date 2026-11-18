@@ -10,7 +10,7 @@ const REPORTS = [
   ["gstr1", "GSTR-1", "Outward supplies: B2B, B2CL, B2CS, credit/debit notes, HSN summary, documents issued. CSV per section for the offline tool."],
   ["gstr3b", "GSTR-3B summary", "Tax liability on outward supplies, reverse charge, eligible ITC and net tax payable."],
   ["sales-register", "Sales register", "All invoices, credit and debit notes with tax break-up."],
-  ["purchase-register", "Purchase register", "All purchase bills with ITC classification."],
+  ["purchase-register", "Purchase register", "All purchase invoices with ITC classification."],
   ["outstanding", "Outstanding & ageing", "Receivables and payables by party, aged 0–30 / 31–60 / 61–90 / 90+ days."],
   ["ledger", "Party ledger", "Statement of account for a customer or supplier with running balance."],
 ] as const;

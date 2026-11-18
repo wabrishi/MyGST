@@ -70,7 +70,7 @@ export default async function PaymentPage({ params }: PageProps<"/c/[companyId]/
                       </Link>
                     ) : a.purchaseBill ? (
                       <Link href={`${base}/purchases/${a.purchaseBill.id}`} className="text-primary hover:underline">
-                        Bill {a.purchaseBill.billNumber}
+                        Purchase invoice {a.purchaseBill.billNumber}
                       </Link>
                     ) : null}
                   </Td>

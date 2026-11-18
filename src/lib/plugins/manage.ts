@@ -249,6 +249,8 @@ export async function uninstallPlugin(pluginId: string, opts: { keepData: boolea
   }
   if (!opts.keepData) {
     await db.pluginData.deleteMany({ where: { pluginId } });
+    await db.pluginRecord.deleteMany({ where: { pluginId } });
+    await db.pluginJobRun.deleteMany({ where: { pluginId } });
     await db.companyPlugin.deleteMany({ where: { pluginId } });
   }
   await db.plugin.update({ where: { id: pluginId }, data: { status: "NOT_INSTALLED", defaultEnabled: false, installedAt: null, installedBy: null } });

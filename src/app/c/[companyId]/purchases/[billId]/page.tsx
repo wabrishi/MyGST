@@ -10,7 +10,7 @@ import { loadPurchase } from "@/lib/purchases";
 import { requireCompanyPage } from "@/lib/tenant";
 import { CancelBillButton } from "./cancel-button";
 
-export const metadata = { title: "Purchase bill" };
+export const metadata = { title: "Purchase invoice" };
 
 const ITC_LABEL = { ELIGIBLE: "Eligible (inputs/services)", CAPITAL_GOODS: "Eligible (capital goods)", INELIGIBLE: "Ineligible" } as const;
 
@@ -25,11 +25,19 @@ export default async function PurchaseViewPage({ params }: PageProps<"/c/[compan
   return (
     <>
       <PageHeader
-        title={`Bill ${b.billNumber}`}
+        title={`Purchase invoice ${b.billNumber}`}
         subtitle={
           <span className="flex items-center gap-2">
             <StatusBadge status={b.cancelled ? "CANCELLED" : paymentStatus({ grandTotal: b.grandTotal, balance: b.balance, dueDate: b.dueDate })} />
             {b.partyName} · {b.billDate}
+            {b.purchaseOrder && (
+              <>
+                {" · against "}
+                <Link href={`${base}/purchase-orders/${b.purchaseOrder.id}`} className="text-primary hover:underline">
+                  {b.purchaseOrder.number}
+                </Link>
+              </>
+            )}
           </span>
         }
         actions={

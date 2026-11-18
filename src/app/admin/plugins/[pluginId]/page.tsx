@@ -1,8 +1,9 @@
+import { Download } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SearchBox } from "@/components/search-box";
 import { Alert, Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
-import { adminCan, requireAdmin } from "@/lib/admin";
+import { isSuperAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { STATE_LABEL, companyPluginState, type CompanyPluginState } from "@/lib/plugins/access";
 import { PLUGIN_EVENTS, PLUGIN_PERMISSIONS, type PluginEvent, type PluginPermission } from "@/lib/plugins/manifest";
@@ -75,14 +76,7 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
             Uploaded by {plugin.uploadedBy ?? "unknown"} · last change {plugin.updatedAt.toISOString().slice(0, 10)}
           </p>
           <p className="mt-1 break-all font-mono text-[11px] text-muted">SHA-256 {plugin.bundleSha256}</p>
-          <p className="mt-2 text-xs">
-            {adminCan(admin, "plugins.upload") && (
-              <a href={`/admin/plugins/${plugin.id}/bundle`} className="font-medium text-primary hover:underline">
-                Download bundle
-              </a>
-            )}
-            <span className="text-muted"> · To update it, upload a newer version on the Plugins page.</span>
-          </p>
+          <p className="mt-2 text-xs text-muted">To update it, upload a newer version on the Plugins page.</p>
         </Card>
       )}
 
@@ -175,6 +169,20 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
         </div>
 
         <div className="flex flex-col gap-4">
+          {isSuperAdmin(admin) && plugin.status !== "MISSING" && (
+            <Card className="p-5 text-sm">
+              <h2 className="mb-1 font-semibold">Download</h2>
+              <p className="mb-3 text-xs text-muted">
+                {plugin.kind === "EXTERNAL"
+                  ? "The plugin's manifest.json. Load it on another MyGST by URL."
+                  : "The packed plugin file. Upload it on another MyGST under Admin → Plugins → Upload a plugin."}{" "}
+                Only super admins see this.
+              </p>
+              <a href={`/admin/plugins/${plugin.id}/download`} download className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 font-medium hover:bg-surface-2">
+                <Download size={15} /> Download {plugin.kind === "EXTERNAL" ? "manifest.json" : `${plugin.id}-${plugin.version}.mygst-plugin.js`}
+              </a>
+            </Card>
+          )}
           {installed && (
             <Card className="p-5">
               <h2 className="mb-3 font-semibold">Availability</h2>
@@ -204,7 +212,7 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
                 </ul>
               </>
             )}
-            {manifest && (manifest.pages.length > 0 || manifest.widgets.length > 0 || manifest.filters.length > 0) && (
+            {manifest && (manifest.pages.length > 0 || manifest.widgets.length > 0 || manifest.filters.length > 0 || manifest.collections.length > 0 || manifest.jobs.length > 0) && (
               <>
                 <h2 className="mb-2 mt-4 font-semibold">Adds</h2>
                 <ul className="list-disc pl-5">
@@ -217,6 +225,28 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
                   {manifest.filters.map((f) => (
                     <li key={f}>
                       Hook: <span className="font-mono text-xs">{f}</span>
+                    </li>
+                  ))}
+                  {manifest.collections.map((c) => (
+                    <li key={c.name}>
+                      Data table: <span className="font-mono text-xs">{c.name}</span>
+                    </li>
+                  ))}
+                  {manifest.jobs.map((j) => (
+                    <li key={j.id}>
+                      {j.every === "daily" ? "Daily" : "Hourly"} job: {j.title ?? j.id}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+            {manifest && manifest.capabilities.length > 0 && (
+              <>
+                <h2 className="mb-2 mt-4 font-semibold">Role permissions</h2>
+                <ul className="list-disc pl-5">
+                  {manifest.capabilities.map((c) => (
+                    <li key={c.key}>
+                      {c.label} <span className="text-xs text-muted">(default: {["OWNER", ...c.roles.filter((r) => r !== "OWNER")].map((r) => r.charAt(0) + r.slice(1).toLowerCase()).join(", ")})</span>
                     </li>
                   ))}
                 </ul>

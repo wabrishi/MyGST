@@ -3,6 +3,7 @@ import {
   ArrowUpRight,
   CalendarRange,
   CircleDollarSign,
+  ClipboardList,
   FilePlus2,
   FileText,
   HandCoins,
@@ -27,7 +28,9 @@ import { DOC_KINDS, kindOfType } from "@/lib/doc-kinds";
 import { isoOf } from "@/lib/documents";
 import { fyLabel, getSelectedFy, fyRange } from "@/lib/fy-context";
 import { formatINR, toPaise } from "@/lib/gst/calc";
+import { todayIST } from "@/lib/gst/fy";
 import { can } from "@/lib/permissions";
+import { openPurchaseOrderStats } from "@/lib/purchase-orders";
 import { fmtPct, ratePct } from "@/lib/reports/kpi-math";
 import { dashboardKpis } from "@/lib/reports/kpis";
 import { setupStatus } from "@/lib/setup";
@@ -216,6 +219,7 @@ export default async function DashboardPage({ params, searchParams }: PageProps<
   }
 
   const k = await dashboardKpis(ctx.companyId, from, to);
+  const pos = can(ctx, "purchaseOrders.view") ? await openPurchaseOrderStats(ctx.companyId, todayIST()) : null;
   const fyShort = fyLabel(fy);
   const maxAgeing = Math.max(1, ...k.ageing.totals);
   const maxCustomer = Math.max(1, ...k.topCustomers.map((c) => c.total));
@@ -305,10 +309,19 @@ export default async function DashboardPage({ params, searchParams }: PageProps<
         <MiniStat
           label="Payable"
           value={formatINR(k.payables.total)}
-          hint={`${k.payables.count} open ${k.payables.count === 1 ? "bill" : "bills"}`}
+          hint={`${k.payables.count} open purchase ${k.payables.count === 1 ? "invoice" : "invoices"}`}
           icon={Wallet}
           href={`${base}/reports/outstanding?side=payable`}
         />
+        {pos && (
+          <MiniStat
+            label="Open purchase orders"
+            value={formatINR(pos.value)}
+            hint={`${pos.count} open${pos.overdue ? ` · ${pos.overdue} overdue` : ""}`}
+            icon={ClipboardList}
+            href={`${base}/purchase-orders?status=${pos.overdue ? "overdue" : "open"}`}
+          />
+        )}
         <MiniStat
           label="Quote win rate"
           value={fmtPct(k.quotations.conversionPct)}

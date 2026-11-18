@@ -5,14 +5,17 @@ import { revalidatePath } from "next/cache";
 import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { holdsGrantable } from "@/lib/permissions";
+import { activeEntries } from "@/lib/plugins/runner";
 import { parseRoleInput } from "@/lib/roles";
 import { requireCompany, type CompanyContext } from "@/lib/tenant";
 
 type RoleInput = { name: string; description: string; permissions: string[] };
 
 /** No privilege escalation: a role can only contain permissions its creator holds. */
-function assertWithinOwn(ctx: CompanyContext, permissions: string[]) {
-  const missing = permissions.filter((p) => !ctx.permissions.has(p as never));
+async function assertWithinOwn(ctx: CompanyContext, permissions: string[]) {
+  const capabilities = new Map((await activeEntries(ctx.companyId).catch(() => [])).map((e) => [e.plugin.id, e.manifest.capabilities]));
+  const missing = permissions.filter((p) => !holdsGrantable(ctx, p, capabilities));
   if (missing.length) throw new UserError(`You can't give permissions you don't have: ${missing.join(", ")}`);
 }
 
@@ -24,7 +27,7 @@ export async function createRole(companyId: string, input: RoleInput): Promise<A
   return run(async () => {
     const ctx = await requireCompany(companyId, "company.roles");
     const data = parseRoleInput(input);
-    assertWithinOwn(ctx, data.permissions);
+    await assertWithinOwn(ctx, data.permissions);
     const role = await db.companyRole
       .create({ data: { id: `crole_${randomUUID()}`, companyId: ctx.companyId, name: data.name, description: data.description, permissions: data.permissions } })
       .catch((e) => {
@@ -42,7 +45,7 @@ export async function updateRole(companyId: string, roleId: string, input: RoleI
     const role = await db.companyRole.findFirst({ where: { id: roleId, companyId: ctx.companyId } });
     if (!role) throw new UserError("Built-in roles can't be changed");
     const data = parseRoleInput(input);
-    assertWithinOwn(ctx, data.permissions);
+    await assertWithinOwn(ctx, data.permissions);
     await db.companyRole.update({ where: { id: role.id }, data: { name: data.name, description: data.description, permissions: data.permissions } }).catch((e) => {
       throw duplicate(e) ? new UserError("A role with this name already exists") : e;
     });

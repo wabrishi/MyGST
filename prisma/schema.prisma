@@ -10,15 +10,15 @@ datasource db {
 // ───────────────────────── Auth (Better Auth core tables) ─────────────────────────
 
 model User {
-  id            String   @id
+  id            String    @id
   name          String
-  email         String   @unique
-  emailVerified Boolean  @default(false)
-  image         String?  @db.Text
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?   @db.Text
   /// Disabled by a platform admin: can't sign in, sessions are dropped.
   disabledAt    DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   sessions      Session[]
   accounts      Account[]
@@ -108,22 +108,25 @@ model Company {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  memberships   Membership[]
-  invitations   Invitation[]
-  roles         CompanyRole[]
-  parties       Party[]
-  products      Product[]
-  numberSeries  NumberSeries[]
-  documents     Document[]
-  purchases     PurchaseBill[]
-  payments      Payment[]
-  auditLogs     AuditLog[]
-  backupTargets BackupTarget[]
-  apiKeys       ApiKey[]
-  integration   CompanyIntegration?
-  outboxEvents  OutboxEvent[]
-  plugins       CompanyPlugin[]
-  pluginData    PluginData[]
+  memberships    Membership[]
+  invitations    Invitation[]
+  roles          CompanyRole[]
+  parties        Party[]
+  products       Product[]
+  numberSeries   NumberSeries[]
+  documents      Document[]
+  purchases      PurchaseBill[]
+  purchaseOrders PurchaseOrder[]
+  payments       Payment[]
+  auditLogs      AuditLog[]
+  backupTargets  BackupTarget[]
+  apiKeys        ApiKey[]
+  integration    CompanyIntegration?
+  outboxEvents   OutboxEvent[]
+  plugins        CompanyPlugin[]
+  pluginData     PluginData[]
+  pluginRecords  PluginRecord[]
+  pluginJobRuns  PluginJobRun[]
 
   @@map("company")
 }
@@ -286,9 +289,10 @@ model Party {
   updatedAt       DateTime  @updatedAt
   company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  documents Document[]
-  purchases PurchaseBill[]
-  payments  Payment[]
+  documents      Document[]
+  purchases      PurchaseBill[]
+  purchaseOrders PurchaseOrder[]
+  payments       Payment[]
 
   @@index([companyId, name])
   @@index([companyId, externalRef])
@@ -306,6 +310,8 @@ model Product {
   purchasePrice Decimal  @default(0) @db.Decimal(14, 2)
   gstRate       Decimal  @default(18) @db.Decimal(5, 2)
   active        Boolean  @default(true)
+  /// Values added by plugins ({ "<plugin>.<field>": { label, value } }), e.g. stock on hand; shown on the product page.
+  customFields  Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -319,6 +325,17 @@ enum DocType {
   QUOTATION
   CREDIT_NOTE
   DEBIT_NOTE
+  /// Only used for number series: purchase orders live in purchase_order, not document.
+  PURCHASE_ORDER
+}
+
+/// CLOSED = short-closed by the user (the rest of the order isn't expected).
+enum PoStatus {
+  OPEN
+  PARTIAL
+  BILLED
+  CLOSED
+  CANCELLED
 }
 
 model NumberSeries {
@@ -454,14 +471,17 @@ model PurchaseBill {
   grandTotal       Decimal   @db.Decimal(14, 2)
   notes            String?   @db.Text
   cancelled        Boolean   @default(false)
+  /// The purchase order this invoice bills (partly or fully), if any.
+  purchaseOrderId  String?
   createdById      String
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  company     Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  party       Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
-  items       PurchaseItem[]
-  allocations PaymentAllocation[]
+  company       Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party         Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  items         PurchaseItem[]
+  allocations   PaymentAllocation[]
 
   @@unique([companyId, partyId, billNumber])
   @@index([companyId, billDate])
@@ -469,26 +489,99 @@ model PurchaseBill {
 }
 
 model PurchaseItem {
-  id          String       @id @default(cuid())
+  id          String             @id @default(cuid())
   billId      String
   position    Int
   productId   String?
   description String
-  hsnSac      String       @default("")
-  unit        String       @default("NOS")
-  qty         Decimal      @db.Decimal(14, 3)
-  rate        Decimal      @db.Decimal(14, 4)
-  discountPct Decimal      @default(0) @db.Decimal(5, 2)
-  gstRate     Decimal      @db.Decimal(5, 2)
-  taxable     Decimal      @db.Decimal(14, 2)
-  cgst        Decimal      @db.Decimal(14, 2)
-  sgst        Decimal      @db.Decimal(14, 2)
-  igst        Decimal      @db.Decimal(14, 2)
-  total       Decimal      @db.Decimal(14, 2)
-  bill        PurchaseBill @relation(fields: [billId], references: [id], onDelete: Cascade)
+  hsnSac      String             @default("")
+  unit        String             @default("NOS")
+  qty         Decimal            @db.Decimal(14, 3)
+  rate        Decimal            @db.Decimal(14, 4)
+  discountPct Decimal            @default(0) @db.Decimal(5, 2)
+  gstRate     Decimal            @db.Decimal(5, 2)
+  taxable     Decimal            @db.Decimal(14, 2)
+  cgst        Decimal            @db.Decimal(14, 2)
+  sgst        Decimal            @db.Decimal(14, 2)
+  igst        Decimal            @db.Decimal(14, 2)
+  total       Decimal            @db.Decimal(14, 2)
+  /// The purchase order line this invoice line bills.
+  poItemId    String?
+  bill        PurchaseBill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  poItem      PurchaseOrderItem? @relation(fields: [poItemId], references: [id], onDelete: SetNull)
 
   @@index([billId])
+  @@index([poItemId])
   @@map("purchase_item")
+}
+
+/// An order we send to a supplier. Not a book entry: billed by one or more purchase invoices.
+model PurchaseOrder {
+  id               String    @id @default(cuid())
+  companyId        String
+  number           String    @db.VarChar(20)
+  fy               String    @db.VarChar(5)
+  seq              Int
+  date             DateTime  @db.Date
+  expectedDate     DateTime? @db.Date
+  partyId          String
+  partyName        String
+  partyGstin       String    @default("")
+  partyAddress     String    @default("") @db.VarChar(1000)
+  partyState       String    @db.Char(2)
+  placeOfSupply    String    @db.Char(2)
+  isInterstate     Boolean
+  pricesIncludeTax Boolean   @default(false)
+  deliveryAddress  String    @default("") @db.VarChar(1000)
+  paymentTerms     String    @default("") @db.VarChar(200)
+  notes            String?   @db.Text
+  status           PoStatus  @default(OPEN)
+  taxableTotal     Decimal   @db.Decimal(14, 2)
+  cgst             Decimal   @db.Decimal(14, 2)
+  sgst             Decimal   @db.Decimal(14, 2)
+  igst             Decimal   @db.Decimal(14, 2)
+  roundOff         Decimal   @db.Decimal(6, 2)
+  grandTotal       Decimal   @db.Decimal(14, 2)
+  createdById      String
+  cancelledAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  company  Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  party    Party               @relation(fields: [partyId], references: [id], onDelete: Restrict)
+  items    PurchaseOrderItem[]
+  invoices PurchaseBill[]
+
+  @@unique([companyId, number])
+  @@index([companyId, date])
+  @@index([companyId, status])
+  @@map("purchase_order")
+}
+
+model PurchaseOrderItem {
+  id          String         @id @default(cuid())
+  orderId     String
+  position    Int
+  productId   String?
+  description String         @db.VarChar(300)
+  hsnSac      String         @default("")
+  unit        String         @default("NOS")
+  qty         Decimal        @db.Decimal(14, 3)
+  /// Sum of this line's qty on purchase invoices that aren't cancelled (kept by recomputePoBilling).
+  billedQty   Decimal        @default(0) @db.Decimal(14, 3)
+  rate        Decimal        @db.Decimal(14, 4)
+  discountPct Decimal        @default(0) @db.Decimal(5, 2)
+  gstRate     Decimal        @db.Decimal(5, 2)
+  taxable     Decimal        @db.Decimal(14, 2)
+  cgst        Decimal        @db.Decimal(14, 2)
+  sgst        Decimal        @db.Decimal(14, 2)
+  igst        Decimal        @db.Decimal(14, 2)
+  total       Decimal        @db.Decimal(14, 2)
+  order       PurchaseOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  billedBy    PurchaseItem[]
+
+  @@index([orderId])
+  @@map("purchase_order_item")
 }
 
 // ───────────────────────── Payments ─────────────────────────
@@ -684,7 +777,6 @@ model OutboxEvent {
   @@map("outbox_event")
 }
 
-
 // ───────────────────────── Plugins ─────────────────────────
 
 enum PluginKind {
@@ -733,6 +825,8 @@ model Plugin {
 
   companies CompanyPlugin[]
   data      PluginData[]
+  records   PluginRecord[]
+  jobRuns   PluginJobRun[]
   logs      PluginLog[]
 
   @@map("plugin")
@@ -784,6 +878,52 @@ model PluginData {
   @@unique([pluginId, companyId, key])
   @@index([companyId])
   @@map("plugin_data")
+}
+
+/// Plugin data tables ("collections"): one row per record, per plugin and company. The fields a plugin
+/// declares as indexes / numbers are copied into i1–i4 / n1–n2 so they can be filtered, sorted and summed.
+model PluginRecord {
+  id          String   @id @default(cuid())
+  pluginId    String   @db.VarChar(64)
+  companyId   String
+  collection  String   @db.VarChar(64)
+  data        Json
+  i1          String?  @db.VarChar(191)
+  i2          String?  @db.VarChar(191)
+  i3          String?  @db.VarChar(191)
+  i4          String?  @db.VarChar(191)
+  n1          Decimal? @db.Decimal(18, 4)
+  n2          Decimal? @db.Decimal(18, 4)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  plugin      Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([pluginId, companyId, collection, createdAt])
+  @@index([pluginId, companyId, collection, i1])
+  @@index([pluginId, companyId, collection, i2])
+  @@index([pluginId, companyId, collection, i3])
+  @@index([pluginId, companyId, collection, i4])
+  @@index([companyId])
+  @@map("plugin_record")
+}
+
+/// When each plugin job (api.schedule) last ran for a company.
+model PluginJobRun {
+  id        String   @id @default(cuid())
+  pluginId  String   @db.VarChar(64)
+  companyId String
+  job       String   @db.VarChar(64)
+  lastRunAt DateTime
+  lastError String?  @db.VarChar(500)
+  updatedAt DateTime @updatedAt
+  plugin    Plugin   @relation(fields: [pluginId], references: [id], onDelete: Cascade)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([pluginId, companyId, job])
+  @@index([companyId])
+  @@map("plugin_job_run")
 }
 
 model PluginLog {

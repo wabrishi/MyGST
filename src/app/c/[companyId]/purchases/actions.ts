@@ -22,6 +22,6 @@ export async function cancelBill(companyId: string, id: string): Promise<ActionR
     const ctx = await requireCompany(companyId, "purchases.write");
     await cancelPurchase(ctx, id);
     revalidatePath(`/c/${ctx.companyId}`, "layout");
-    return ok(undefined, "Bill cancelled");
+    return ok(undefined, "Purchase invoice cancelled");
   });
 }

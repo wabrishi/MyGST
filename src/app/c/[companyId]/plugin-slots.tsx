@@ -57,7 +57,7 @@ export async function PluginDocumentPanel({ ctx, doc }: { ctx: CompanyContext; d
   const fields = Object.entries(doc.customFields ?? {});
   const entries = await activeEntries(ctx.companyId);
   const links = entries.some((e) => e.manifest.filters.includes("document.actions"))
-    ? await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role }, "document.actions", [] as LinkItem[], { document: doc })
+    ? await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx }, "document.actions", [] as LinkItem[], { document: doc })
     : [];
   if (!fields.length && !links.length) return null;
   return (
@@ -86,7 +86,7 @@ export async function PluginDocumentPanel({ ctx, doc }: { ctx: CompanyContext; d
 export async function pluginReportLinks({ ctx }: { ctx: CompanyContext }) {
   const entries = await activeEntries(ctx.companyId);
   if (!entries.some((e) => e.manifest.filters.includes("reports.list"))) return [];
-  return (await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role }, "reports.list", [] as LinkItem[], {})).slice(0, 20);
+  return (await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx }, "reports.list", [] as LinkItem[], {})).slice(0, 20);
 }
 
 function PluginLink({ companyId, link }: { companyId: string; link: LinkItem }) {

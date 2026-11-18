@@ -12,6 +12,10 @@ export default async function EditProductPage({ params }: PageProps<"/c/[company
   const ctx = await requireCompany(companyId);
   const p = await db.product.findFirst({ where: { id: productId, companyId: ctx.companyId } });
   if (!p) notFound();
+  // Values plugins keep on the product (e.g. stock on hand), keyed "<plugin>.<field>".
+  const fields = Object.entries((p.customFields ?? {}) as Record<string, { label?: unknown; value?: unknown }>)
+    .filter(([, f]) => f && typeof f === "object")
+    .map(([k, f]) => [k, { label: String(f.label ?? k), value: String(f.value ?? "") }] as const);
   return (
     <div className="max-w-3xl">
       <PageHeader title={p.name} />
@@ -31,6 +35,19 @@ export default async function EditProductPage({ params }: PageProps<"/c/[company
           }}
         />
       </Card>
+      {fields.length > 0 && (
+        <Card className="mt-4 p-5">
+          <h2 className="mb-3 text-sm font-semibold">From apps</h2>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            {fields.map(([key, f]) => (
+              <div key={key}>
+                <dt className="text-xs text-muted">{f.label}</dt>
+                <dd className="font-medium">{f.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </Card>
+      )}
     </div>
   );
 }

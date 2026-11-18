@@ -5,7 +5,7 @@ import { useMemo, type ReactNode } from "react";
 import { GST_RATES, UNITS, calcDocument, formatINR } from "@/lib/gst/calc";
 import { Button, Card, Input, Select } from "./ui";
 
-/** Shared line-item editor + totals used by sales documents and purchase bills. */
+/** Shared line-item editor + totals used by sales documents, purchase orders and purchase invoices. */
 
 export interface LineProduct {
   id: string;
@@ -26,6 +26,10 @@ export interface Line {
   rate: string;
   discountPct: string;
   gstRate: string;
+  /** The line this one comes from (e.g. a purchase order line); kept on submit. */
+  sourceId?: string;
+  /** Short label shown under the description for linked lines (e.g. "PO line · 4 left"). */
+  sourceLabel?: string;
 }
 
 export interface LineValues {
@@ -37,6 +41,8 @@ export interface LineValues {
   rate: number;
   discountPct: number;
   gstRate: number;
+  sourceId?: string;
+  sourceLabel?: string;
 }
 
 let nextKey = 1;
@@ -78,6 +84,7 @@ export const linesForSubmit = (lines: Line[]) =>
       rate: l.rate || "0",
       discountPct: l.discountPct || "0",
       gstRate: l.gstRate,
+      ...(l.sourceId && { sourceId: l.sourceId }),
     }));
 
 export function useLineCalc(lines: Line[], interstate: boolean, pricesIncludeTax: boolean) {
@@ -148,6 +155,7 @@ export function LineItemsTable({
                 </td>
                 <td>
                   <Input value={l.description} onChange={(e) => update(l.key, { description: e.target.value })} placeholder="Item description" />
+                  {l.sourceLabel && <div className="mt-0.5 text-[11px] text-muted">{l.sourceLabel}</div>}
                   {err("description") && <div className="text-xs text-danger">{err("description")}</div>}
                 </td>
                 <td>

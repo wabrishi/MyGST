@@ -15,7 +15,7 @@ export function CancelBillButton({ companyId, billId }: { companyId: string; bil
         className="text-danger"
         disabled={pending}
         onClick={async () => {
-          if (!confirm("Cancel this purchase bill?")) return;
+          if (!confirm("Cancel this purchase invoice?")) return;
           const r = await execute();
           if (r?.ok) router.refresh();
         }}

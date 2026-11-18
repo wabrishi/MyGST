@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import type { Prisma } from "@/generated/prisma/client";
-import { platformRolePermissions, type AdminPermission } from "./admin-permissions";
+import { PLATFORM_ROLE_ID, platformRolePermissions, type AdminPermission } from "./admin-permissions";
 import { getSessionUser, type SessionUser } from "./auth";
 import { db } from "./db";
 import { UserError } from "./user-error";
@@ -55,6 +55,12 @@ export interface AdminContext extends AdminGrants {
 }
 
 export const adminCan = (a: { permissions: ReadonlySet<string> }, perm: AdminPermission) => a.permissions.has(perm);
+
+/**
+ * A full super admin: break-glass email or the built-in Super admin platform role. Some actions (such as
+ * downloading plugin code) are kept to super admins on purpose, so custom platform roles can't be given them.
+ */
+export const isSuperAdmin = (a: Pick<AdminGrants, "breakGlass" | "roles">) => a.breakGlass || a.roles.some((r) => r.id === PLATFORM_ROLE_ID.SUPER_ADMIN);
 
 /**
  * For /admin pages and actions. Not signed in → login; no admin permission at all → 404 (the panel

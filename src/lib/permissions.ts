@@ -28,8 +28,10 @@ export const PERMISSION_GROUPS = [
     items: [
       ["payments.view", "See payments"],
       ["payments.write", "Record and delete payments"],
-      ["purchases.view", "See purchase bills"],
-      ["purchases.write", "Record and edit purchase bills"],
+      ["purchaseOrders.view", "See purchase orders"],
+      ["purchaseOrders.write", "Create, edit, email and close purchase orders"],
+      ["purchases.view", "See purchase invoices"],
+      ["purchases.write", "Record and edit purchase invoices"],
     ],
   },
   { label: "Reports", items: [["reports.view", "See reports and financial figures"]] },
@@ -48,8 +50,15 @@ export const PERMISSION_GROUPS = [
 ] as const;
 
 export type CorePermission = (typeof PERMISSION_GROUPS)[number]["items"][number][0];
-/** `app:<pluginId>`: open that plugin's pages and widgets (see canUseApp). */
-export type Permission = CorePermission | `app:${string}`;
+/**
+ * `app:<pluginId>`: open that plugin's pages and widgets (see canUseApp).
+ * `plugin:<pluginId>:<capability>`: a permission a plugin declares itself (see canPlugin).
+ */
+export type Permission = CorePermission | `app:${string}` | `plugin:${string}`;
+
+const APP_PERMISSION = /^app:[a-z0-9-]{1,64}$/;
+const PLUGIN_PERMISSION = /^plugin:[a-z0-9-]{1,64}:[a-zA-Z0-9_.]{1,60}$/;
+export const pluginPermission = (pluginId: string, key: string): Permission => `plugin:${pluginId}:${key}`;
 
 export const ALL_PERMISSIONS: CorePermission[] = PERMISSION_GROUPS.flatMap((g) => g.items.map(([k]) => k));
 export const PERMISSION_LABEL = Object.fromEntries(PERMISSION_GROUPS.flatMap((g) => g.items.map(([k, l]) => [k, l]))) as Record<CorePermission, string>;
@@ -70,6 +79,8 @@ const ACCOUNTANT: CorePermission[] = [
   "masters.delete",
   "payments.view",
   "payments.write",
+  "purchaseOrders.view",
+  "purchaseOrders.write",
   "purchases.view",
   "purchases.write",
   "reports.view",
@@ -90,7 +101,7 @@ export interface RoleLike {
 /** Valid permissions stored on a custom role (unknown keys are dropped). */
 export function storedPermissions(raw: unknown): Permission[] {
   if (!Array.isArray(raw)) return [];
-  return raw.filter((p): p is Permission => typeof p === "string" && ((ALL_PERMISSIONS as string[]).includes(p) || /^app:[a-z0-9-]{1,64}$/.test(p)));
+  return raw.filter((p): p is Permission => typeof p === "string" && ((ALL_PERMISSIONS as string[]).includes(p) || APP_PERMISSION.test(p) || PLUGIN_PERMISSION.test(p)));
 }
 
 export function rolePermissions(role: RoleLike): readonly Permission[] {
@@ -129,6 +140,36 @@ export const canAny = (who: Grants | null | undefined, perms: readonly Permissio
 export function canUseApp(who: (Grants & { roles: Pick<RoleLike, "key">[] }) | null | undefined, pluginId: string, allowed: readonly string[]) {
   if (!who) return false;
   return who.roles.some((r) => r.key && allowed.includes(r.key)) || who.permissions.has(`app:${pluginId}`);
+}
+
+/** A plugin capability as declared in its manifest (`capabilities`). */
+export interface CapabilityLike {
+  key: string;
+  roles: readonly string[];
+}
+
+/**
+ * A plugin's own permission (manifest `capabilities`): owners always hold it; other built-in roles hold
+ * it when the plugin lists them; custom roles hold it when they grant `plugin:<id>:<key>`.
+ */
+export function canPlugin(who: (Grants & { roles: Pick<RoleLike, "key">[] }) | null | undefined, pluginId: string, capabilities: readonly CapabilityLike[], key: string) {
+  if (!who) return false;
+  const cap = capabilities.find((c) => c.key === key);
+  if (!cap) return false;
+  if (who.roles.some((r) => r.key === "OWNER")) return true;
+  return who.roles.some((r) => r.key && cap.roles.includes(r.key)) || who.permissions.has(pluginPermission(pluginId, key));
+}
+
+/**
+ * Whether a member holds a permission they want to put in a custom role (no privilege escalation).
+ * Owners hold every plugin permission; others need it themselves. `capabilities` maps plugin id → its list.
+ */
+export function holdsGrantable(who: Grants & { roles: Pick<RoleLike, "key">[] }, perm: string, capabilities: ReadonlyMap<string, readonly CapabilityLike[]>) {
+  const isOwner = who.roles.some((r) => r.key === "OWNER");
+  if (APP_PERMISSION.test(perm)) return isOwner || who.permissions.has(perm);
+  const m = /^plugin:([a-z0-9-]{1,64}):([a-zA-Z0-9_.]{1,60})$/.exec(perm);
+  if (m) return canPlugin(who, m[1], capabilities.get(m[1]) ?? [], m[2]);
+  return who.permissions.has(perm);
 }
 
 /** The settings area: open when any of these is held. */

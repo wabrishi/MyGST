@@ -137,7 +137,7 @@ export default async function AdminCompanyPage({ params }: PageProps<"/admin/com
             <dl className="grid grid-cols-2 gap-y-1">
               <dt className="text-muted">Sales documents</dt>
               <dd className="text-right">{c._count.documents}</dd>
-              <dt className="text-muted">Purchase bills</dt>
+              <dt className="text-muted">Purchase invoices</dt>
               <dd className="text-right">{c._count.purchases}</dd>
               <dt className="text-muted">Payments</dt>
               <dd className="text-right">{c._count.payments}</dd>

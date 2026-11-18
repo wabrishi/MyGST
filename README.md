@@ -16,7 +16,7 @@ Multi-company, multi-user GST billing SaaS: tax invoices, quotations, credit/deb
 | Numbering | `PREFIX/FY/0001`, ≤16 chars, gap-free and unique per financial year (row-locked, concurrency-tested) |
 | PDF | A4 PDF with HSN-wise tax summary, bank/UPI details, terms, signature; download, print or email |
 | Payments | Receipts and supplier payments, allocation across invoices/bills (FIFO auto-allocate), advances, paid/partly paid/overdue status |
-| Purchases | Supplier bills with ITC classification (eligible / capital goods / ineligible), reverse charge |
+| Purchases | **Purchase orders** to suppliers (own number series `PO/FY/0001`, A4 PDF, email, expected delivery, delivery address, payment terms) billed by one or more **purchase invoices** (partial billing tracks ordered vs billed qty per line: Open → Partly billed → Billed, or Close the rest). Purchase invoices record the supplier's invoice with ITC classification (eligible / capital goods / ineligible) and reverse charge |
 | Reports | GSTR-1 (B2B, B2CL, B2CS, CDNR, CDNUR, HSN B2B/B2C, documents issued) with offline-tool CSVs; GSTR-3B summary; sales & purchase registers; receivable/payable ageing; party ledger |
 | Financial years | Year switcher (lists, reports and dashboard follow it), quarterly presets, **close/re-open a year** (locks all transactions dated in it) |
 | Safety | Issued documents are cancelled, never deleted; audit log; strict tenant isolation; JSON data export |
@@ -147,7 +147,7 @@ For the suite (Lead Manager, WBportal). The contract is in `LeadManager/docs/ARC
 
 **In a company** (*Settings → Roles* and *Settings → Users*)
 - Built-in roles: **Owner** (everything), **Accountant** (billing, payments, purchases, reports) and **Staff** (create invoices, quotations and masters). Their permissions are defined in `src/lib/permissions.ts`.
-- **Custom roles** pick individual permissions, including access to each plugin's pages (*Apps*).
+- **Custom roles** pick individual permissions, including access to each plugin's pages (*Apps*) and the permissions plugins add themselves (for example Lead Manager's *Convert leads to customers*).
 - A member can hold **several roles**; their permissions are the union.
 - Members can only give roles that don't exceed their own access, only an Owner can change another Owner, and a company always keeps at least one Owner.
 
@@ -160,12 +160,14 @@ For the suite (Lead Manager, WBportal). The contract is in `LeadManager/docs/ARC
 
 MyGST can be extended with plugins, managed by the super admin in **Admin → Plugins**:
 
-- **Code plugins** live in `src/plugins/<id>/` and ship with a deploy, or are **packed** (`npm run plugin:pack -- <id>`) and **uploaded** in Admin → Plugins without a deploy (trusted code, stored in the database). They can hook into events, validate or enrich documents, add PDF sections, pages, dashboard widgets, reports and settings.
+- **Code plugins** live in `src/plugins/<id>/` and ship with a deploy, or are **packed** (`npm run plugin:pack -- <id>`) and **uploaded** in Admin → Plugins without a deploy (trusted code, stored in the database). They can hook into events, validate or enrich documents, add PDF sections, pages, dashboard widgets, reports and settings. Big plugins (inventory, accounting, CRM) also get **data tables**, their own **role permissions**, **form actions** with a UI kit, a **sidebar section** and **scheduled jobs**.
 - **External plugins** run on their own server and are installed from a manifest URL. They receive signed events, call `/api/v1` with a key limited to their permissions, and show pages in a frame.
+
+Super admins can **download** any plugin from Admin → Plugins (built-in and uploaded ones as an uploadable `.mygst-plugin.js`, external ones as `manifest.json`) to back it up or move it to another MyGST.
 
 When installing, the super admin chooses whether the plugin starts **on by default** and who it's **available to**: all companies (with per-company blocks), selected companies, or nobody (kill switch). Owners turn available plugins on or off and configure them in **Settings → Plugins**.
 
-Building one: see the **[plugin developer guide](docs/plugins/README.md)**, or start with `npm run plugin:new -- my-plugin "My plugin"`. The examples are `invoice-footer`, `slack-notify`, `po-number` and `examples/external-plugin`.
+Building one: see the **[plugin developer guide](docs/plugins/README.md)**, or start with `npm run plugin:new -- my-plugin "My plugin"`. The examples are `invoice-footer`, `slack-notify`, `po-number` and `examples/external-plugin`; **`lead-manager`** (leads, pipeline, follow-ups, convert to customer and quotation, morning email) is the reference for a big plugin.
 
 ## GST notes & limitations (v1)
 

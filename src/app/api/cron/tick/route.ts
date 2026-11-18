@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
 import { deliverPending } from "@/lib/events/outbox";
+import { runDueJobs } from "@/lib/plugins/jobs";
 
 /**
  * Event dispatcher (ARCHITECTURE.md §5). Call every minute from a Hostinger Cron Job:
@@ -16,13 +17,18 @@ async function handle(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
   const events = await deliverPending({ limit: 100 });
+  // Plugin jobs (api.schedule): hourly / daily per company.
+  const jobs = await runDueJobs().catch((e: Error) => {
+    console.error("[plugins] jobs:", e.message);
+    return { ran: 0, failed: 0, more: false };
+  });
   // Housekeeping (cheap, indexed): plugin logs older than 30 days.
   const pruned = await db.pluginLog.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 30 * 864e5) } } }).catch(() => ({ count: 0 }));
   // Shown on Admin → System ("cron last ran").
   await db.systemState
     .upsert({ where: { key: "cron.lastTick" }, create: { key: "cron.lastTick", value: { at: new Date().toISOString(), events } }, update: { value: { at: new Date().toISOString(), events } } })
     .catch(() => {});
-  return Response.json({ events, pluginLogsPruned: pruned.count });
+  return Response.json({ events, jobs, pluginLogsPruned: pruned.count });
 }
 
 export const GET = handle;

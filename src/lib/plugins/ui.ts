@@ -1,6 +1,6 @@
 import "server-only";
 import { decryptSecret } from "../backup/crypto";
-import { canUseApp } from "../permissions";
+import { canPlugin, canUseApp } from "../permissions";
 import type { CompanyContext } from "../tenant";
 import { pluginLog } from "./log";
 import { activeEntries, applyFilters, contextFor, type PluginEntry } from "./runner";
@@ -12,6 +12,8 @@ export interface PluginNavItem {
   href: string;
   label: string;
   icon: string;
+  /** Plugins with several pages get their own sidebar section (named after the plugin). */
+  section?: string;
 }
 
 
@@ -25,13 +27,18 @@ export async function pluginNav(ctx: CompanyContext): Promise<PluginNavItem[]> {
   const entries = await activeEntries(ctx.companyId);
   const items: PluginNavItem[] = [];
   for (const e of entries) {
-    for (const p of e.manifest.pages) {
-      if (p.inNav && canUseApp(ctx, e.plugin.id, p.roles)) items.push({ href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`, label: p.title, icon: p.icon ?? e.manifest.icon });
-    }
+    const pages = e.manifest.pages.filter((p) => p.inNav && canOpenPage(ctx, e, p));
+    const section = pages.length > 1 ? e.manifest.name : undefined;
+    for (const p of pages) items.push({ href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`, label: p.title, icon: p.icon ?? e.manifest.icon, ...(section && { section }) });
   }
-  const extra = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role }, "nav.items", [] as LinkItem[], {});
+  const extra = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx }, "nav.items", [] as LinkItem[], {});
   for (const l of extra.slice(0, 10)) items.push({ href: companyHref(ctx.companyId, l.href), label: String(l.label).slice(0, 40), icon: "Puzzle" });
   return items;
+}
+
+/** A plugin page or widget: its roles (or app:<id>) and, if set, its capability. */
+export function canOpenPage(ctx: CompanyContext, e: PluginEntry, p: { roles: readonly string[]; permission?: string }) {
+  return canUseApp(ctx, e.plugin.id, p.roles) && (!p.permission || canPlugin(ctx, e.plugin.id, e.manifest.capabilities, p.permission));
 }
 
 export interface WidgetSlot {
@@ -47,7 +54,7 @@ export async function pluginWidgets(ctx: CompanyContext): Promise<WidgetSlot[]> 
   const entries = await activeEntries(ctx.companyId);
   return entries.flatMap((e) =>
     e.manifest.widgets
-      .filter((w) => canUseApp(ctx, e.plugin.id, w.roles))
+      .filter((w) => canOpenPage(ctx, e, w))
       .filter((w) => (e.code ? e.code.widgets.has(w.id) : !!e.manifest.pageBaseUrl))
       .map((w) => ({ key: `${e.plugin.id}:${w.id}`, pluginId: e.plugin.id, title: w.title, width: w.width, entry: e, widgetId: w.id })),
   );
@@ -58,7 +65,7 @@ export async function renderCodeWidget(slot: WidgetSlot, ctx: CompanyContext) {
   const Component = slot.entry.code?.widgets.get(slot.widgetId);
   if (!Component) return null;
   try {
-    return await Component({ ctx: await contextFor(slot.entry, ctx.companyId, ctx.user, ctx.role) });
+    return await Component({ ctx: await contextFor(slot.entry, ctx.companyId, ctx.user, ctx.role, ctx) });
   } catch (e) {
     await pluginLog(slot.pluginId, ctx.companyId, "error", `widget ${slot.widgetId}: ${(e as Error).message}`);
     return null;

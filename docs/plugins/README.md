@@ -5,7 +5,10 @@ Plugins add features to MyGST without changing its core. They can:
 - check or enrich documents before they are saved
 - add sections to the invoice PDF
 - add pages, dashboard widgets, report entries and settings
-- keep their own data
+- keep their own data, in key-value storage or real **data tables**
+- add their own **role permissions** (Settings → Roles), forms and scheduled jobs
+
+That's enough to build whole modules such as inventory, accounting or a CRM. The built-in **Lead Manager** plugin (`src/plugins/lead-manager`) is the reference example of a big plugin.
 
 This guide covers how to build, test and ship one.
 
@@ -16,10 +19,12 @@ This guide covers how to build, test and ship one.
 - [Hooks: actions](#actions-events)
 - [Hooks: filters](#filters)
 - [Pages, widgets, settings and routes](#pages-widgets-settings-and-routes)
+- [Building big plugins](#building-big-plugins): data tables, role permissions, forms, UI kit, scheduled jobs
 - [The `ctx` object](#the-ctx-object)
 - [Security rules](#security-rules)
 - [Testing](#testing)
 - [External plugins](#external-plugins)
+- [Package, upload and download](#package-upload-and-download)
 - [Versioning, upgrades and uninstalling](#versioning-upgrades-and-uninstalling)
 - [Submission checklist](#submission-checklist)
 
@@ -37,7 +42,7 @@ This guide covers how to build, test and ship one.
 | Talks to MyGST  | In-process, through the SDK (`@/lib/plugins/sdk`) | Signed HTTP calls in both directions |
 | Good for        | Features that change how MyGST works | Integrations with other systems, and work by third parties |
 
-A code plugin can reach MyGST in two ways: merged into this repo and deployed, or **packed and uploaded** by an admin (see [Package & upload](#package--upload)). Uploaded code is trusted code, like a WordPress plugin: it runs inside MyGST.
+A code plugin can reach MyGST in two ways: merged into this repo and deployed, or **packed and uploaded** by an admin (see [Package, upload and download](#package-upload-and-download)). Uploaded code is trusted code, like a WordPress plugin: it runs inside MyGST.
 
 ### Who switches what
 
@@ -141,8 +146,11 @@ Working examples ship in the repo:
 | `events` | string[] | [Actions](#actions-events) to receive. Each needs its matching permission. |
 | `filters` | string[] | [Filters](#filters) the plugin implements. |
 | `settings` | field[] | `{ key, label, type, help?, required?, default?, options? }`. `type` is one of `text`, `textarea`, `number`, `boolean`, `select` (needs `options: [{ value, label }]`), `secret` or `url`. MyGST renders the form. `secret` values are encrypted at rest and never shown again. |
-| `pages` | page[] | `{ slug, title, icon?, roles?, inNav? }`. The URL is `/c/<company>/apps/<id>/<slug>`. `roles` defaults to all three (`OWNER`, `ACCOUNTANT`, `STAFF`). `inNav` (default true) adds it under **Apps** in the sidebar. |
-| `widgets` | widget[] | `{ id, title, roles?, width? }` on the dashboard. `width` is `third` (default), `half` or `full`. |
+| `pages` | page[] | Up to 20. `{ slug, title, icon?, roles?, inNav?, permission? }`. The URL is `/c/<company>/apps/<id>/<slug>`. `roles` defaults to all three (`OWNER`, `ACCOUNTANT`, `STAFF`). `inNav` (default true) adds it to the sidebar: under **Apps**, or in a section named after the plugin when it has several pages. `permission` is one of your `capabilities`. |
+| `widgets` | widget[] | `{ id, title, roles?, width?, permission? }` on the dashboard. `width` is `third` (default), `half` or `full`. |
+| `collections` | table[] | Up to 10 [data tables](#data-tables): `{ name, indexes?: string[] (max 4), numbers?: string[] (max 2) }`. Code plugins only. |
+| `capabilities` | permission[] | Up to 30 [role permissions](#role-permissions): `{ key, label, roles? }`, e.g. `{ key: "stock.adjust", label: "Adjust stock", roles: ["ACCOUNTANT"] }`. |
+| `jobs` | job[] | Up to 10 [scheduled jobs](#scheduled-jobs): `{ id, every: "hourly" \| "daily", title? }`. Code plugins only. |
 | `webhookUrl`, `pageBaseUrl`, `validateUrl` | https URL | **External plugins only.** See [External plugins](#external-plugins). |
 
 ### Permissions
@@ -152,11 +160,14 @@ Working examples ship in the repo:
 | `company:read` | `ctx.data.company()`; `company.updated` events |
 | `documents:read` | `ctx.data.documents.list/get`; invoice, quotation and note events; `GET /api/v1/documents` |
 | `documents:write` | `ctx.data.documents.setCustomField/createQuotation`; `POST /api/v1/quotations` |
-| `parties:read` | `ctx.data.parties.list`; `party.saved` |
+| `parties:read` | `ctx.data.parties.list/get`; `party.saved` |
 | `parties:write` | `ctx.data.parties.upsert`; `POST /api/v1/parties/upsert` |
-| `products:read` | `ctx.data.products.list`; `product.saved` |
-| `payments:read` | `ctx.data.payments.receivables`; `payment.received`, `payment.paid` |
-| `purchases:read` | `ctx.data.purchases.list`; `purchase.saved` |
+| `products:read` | `ctx.data.products.list/get`; `product.saved` |
+| `products:write` | `ctx.data.products.setCustomField` (shown on the product page, e.g. stock on hand) |
+| `payments:read` | `ctx.data.payments.receivables/list`; `payment.received`, `payment.paid` |
+| `purchases:read` | `ctx.data.purchases.list/get`; `purchase.saved`, `purchase.cancelled` |
+| `purchaseOrders:read` | `ctx.data.purchaseOrders.list/get`; `purchase_order.saved`, `purchase_order.cancelled` |
+| `mail:send` | `ctx.mail.send`: email company members or a customer/supplier (100 a day per company) |
 | `reports:read` | Reserved for report data (not yet exposed) |
 
 Calling a `ctx.data` method without its permission throws an error that names the missing permission.
@@ -179,17 +190,23 @@ api.on("invoice.issued", async (event, ctx) => { … }, { priority: 5 });
 
 | Event | `data` (amounts in rupees) |
 |---|---|
-| `invoice.issued` | `id, number, total, amount, status, url, date, partyId, leadRef?` |
+| `invoice.issued` | `id, number, total, amount, status, url, date, partyId, partyName, items[], leadRef?` |
 | `invoice.cancelled` | `id, number, total, status: "CANCELLED", url, partyId, leadRef?` |
-| `quotation.created` | `id, number, total, status: "OPEN", url, date, partyId, leadRef?` |
+| `document.updated` | `id, type, number, status, total, url, date, partyId, partyName, items[]`: an invoice, quotation or note was edited |
+| `quotation.created` | `id, number, total, status: "OPEN", url, date, partyId, partyName, items[], leadRef?` |
 | `quotation.converted` | `id, number, total, url, partyId, invoiceId, invoiceNumber, invoiceUrl` |
-| `credit_note.issued`, `debit_note.issued` | `id, number, total, url, date, partyId, originalInvoiceId, reason` |
+| `credit_note.issued`, `debit_note.issued` | `id, number, total, url, date, partyId, partyName, items[], originalInvoiceId, reason` |
 | `payment.received` | `id, number (reference), amount, url, partyId, invoiceIds[], date, leadRef?` |
 | `payment.paid` | `id, number (reference), amount, url, partyId, billIds[], date` |
-| `purchase.saved` | `id, number (supplier bill no.), total, status: CREATED or UPDATED, url, partyId, date, itcType` |
+| `purchase.saved` | `id, number (supplier invoice no.), total, status: CREATED or UPDATED, url, partyId, partyName, date, itcType, purchaseOrderId, items[]` |
+| `purchase.cancelled` | `id, number, total, status: "CANCELLED", url, partyId, partyName, date, purchaseOrderId, items[]` |
+| `purchase_order.saved` | `id, number, total, status: CREATED or UPDATED, url, partyId, partyName, date, expectedDate, items[]` |
+| `purchase_order.cancelled` | `id, number, total, status: "CANCELLED", url, partyId, partyName` |
 | `party.saved` | `id, status, name, type, gstin, phone, email, stateCode, url` |
 | `product.saved` | `id, status, name, hsnSac, salePrice, gstRate, url` |
 | `company.updated` | `id, name, gstin, stateCode` |
+
+`items[]` are the document's lines: `{ productId, description, hsnSac, qty, unit, rate, gstRate, taxable }` (rupees, `productId` null for free-text lines). That's what stock and ledger plugins post from.
 
 Throwing from a handler marks the delivery failed, and it is retried. Return normally when there's nothing to do.
 
@@ -259,7 +276,7 @@ api.settingsPage(async ({ ctx }) => <p className="text-sm text-muted">Connected 
 The page and widget contract:
 - A page is shown at `/c/<company>/apps/<plugin>/<slug>/<…path>` inside the normal app layout. MyGST checks membership and the page's `roles`.
 - If a page or widget throws, users see a short notice and the error is logged.
-- Pages are server components. For client-side interactivity, put a `"use client"` component in your plugin folder and render it from the page.
+- Pages are server components. To change data from a page, use [form actions](#forms-and-actions) (they work in uploaded plugins too). Built-in plugins may also render a `"use client"` component from their folder.
 
 **HTTP routes** are for webhooks from other services, or for your client components to call:
 
@@ -269,8 +286,123 @@ api.route("GET", "export/*", async (request, { ctx, path }) => new Response("…
 ```
 
 - The URL is `/api/plugins/<id>/<path>`. A path ending in `/*` matches anything below it, and the rest arrives in `path`.
-- **Signed-in routes** (the default) need `?companyId=<id>`. MyGST checks that the caller is a member there with one of `roles`, and that the plugin is active. `ctx` is then that user's context.
+- **Signed-in routes** (the default) need `?companyId=<id>`. MyGST checks that the caller is a member there with one of `roles` (and the `permission` capability, if you set one), and that the plugin is active. `ctx` is then that user's context.
 - **Public routes** (`{ public: true }`) get `ctx: null`. Authenticate the caller yourself, for example with a shared secret stored in your settings. Then use `await contextFor(companyId)`, which returns `null` unless your plugin is active for that company.
+
+---
+
+## Building big plugins
+
+Modules such as inventory, accounting or a CRM need more than events and a page. These pieces fit together; [Lead Manager](#reference-plugin-lead-manager) uses all of them.
+
+### Data tables
+
+Declare tables in the manifest, then use `ctx.db.collection(name)`. Records are JSON objects (max 64 KB), stored per plugin **and** per company. The fields you list in `indexes` (text, max 191 characters) and `numbers` are indexed, so you can filter, sort and sum on them. Everything else is stored but not queryable.
+
+```ts
+// manifest
+collections: [{ name: "stock_moves", indexes: ["productId", "date", "kind"], numbers: ["qty", "value"] }],
+
+// code
+const moves = ctx.db.collection<{ productId: string; date: string; kind: "in" | "out"; qty: number; value: number; ref: string }>("stock_moves");
+await moves.insert({ productId, date: "2026-11-18", kind: "in", qty: 10, value: 2500, ref: "PUR/12" });
+const onHand = (await moves.sum("qty", { productId, kind: "in" })) - (await moves.sum("qty", { productId, kind: "out" }));
+const recent = await moves.find({ where: { productId, date: { gte: "2026-04-01" } }, orderBy: "-date", limit: 50, offset: 0 });
+await moves.update(recent[0].id, { value: 2600 });   // merge
+await moves.deleteMany({ ref: "PUR/12" });            // a filter is required
+```
+
+| Method | Notes |
+|---|---|
+| `insert(data)`, `get(id)`, `update(id, patch)`, `replace(id, data)`, `delete(id)` | Records come back with `id`, `createdAt`, `updatedAt`, `createdById`. |
+| `find({ where?, orderBy?, limit? (≤ 500), offset? })`, `findOne(where)` | Default order: newest first. `orderBy`: `"field"`, `"-field"` or a list. |
+| `count(where?)`, `sum(numberField, where?)`, `deleteMany(where)` | |
+
+A `where` matches on index or number fields (and `id`, `createdAt`): `{ stage: "Won" }`, `{ value: { gte: 1000 } }`, `{ id: { in: [...] } }`, `{ name: { contains: "acme" } }`. Operators: `eq`, `ne`, `in`, `gt`, `gte`, `lt`, `lte`, `startsWith`, `contains` (text matches ignore case). Using a field that isn't declared throws a clear error. Dates stored as `YYYY-MM-DD` text sort correctly.
+
+Limits: 200,000 records per plugin per company. Adding a field to `indexes` later only indexes records saved after that, so plan your indexes before the first release. Uninstalling with "delete data" removes the records.
+
+### Role permissions
+
+Your plugin can add its own permissions to MyGST's RBAC:
+
+```ts
+capabilities: [
+  { key: "stock.view", label: "See stock", roles: ["OWNER", "ACCOUNTANT", "STAFF"] },
+  { key: "stock.adjust", label: "Adjust stock", roles: ["ACCOUNTANT"] },
+],
+pages: [{ slug: "adjust", title: "Adjust stock", permission: "stock.adjust" }],
+```
+
+- `roles` are the built-in roles that hold the permission by default. **Owners always hold every one.**
+- In **Settings → Roles**, owners see a group named after your plugin and can put these permissions in custom roles (stored as `plugin:<id>:<key>`).
+- MyGST checks `permission` on pages, widgets, routes and actions before your code runs. Inside your code use `ctx.can("stock.adjust")`, for example to hide a button.
+- In events and jobs there's no user, so `ctx.can()` returns `true`: the plugin itself is acting.
+
+### Forms and actions
+
+Pages render on the server, so changes go through **form actions**. They are plain HTML forms, so they work without client JavaScript and inside uploaded plugins.
+
+```tsx
+import { ActionForm, Button, Field, Hidden, Input, PluginError } from "@/lib/plugins/sdk";
+
+api.action("adjust", async (form, ctx) => {
+  const qty = Number(form.get("qty"));
+  if (!qty) throw new PluginError("Enter a quantity");        // shown as an error on the page
+  await ctx.db.collection("stock_moves").insert({ productId: String(form.get("productId")), kind: "adjust", qty, date: "2026-11-18", value: 0 });
+  return { message: "Stock adjusted", redirect: ctx.pageUrl("stock") };  // both optional
+}, { permission: "stock.adjust" });
+
+api.page("adjust", async ({ ctx }) => (
+  <ActionForm ctx={ctx} action="adjust">
+    <Hidden name="productId" value="…" />
+    <Field label="Quantity"><Input name="qty" type="number" /></Field>
+    <Button>Save</Button>
+  </ActionForm>
+));
+```
+
+- The form posts to `/api/plugins/<id>/_action/<name>?companyId=…`. MyGST checks the user is a signed-in member, the plugin is active, the form came from MyGST itself (cross-site posts are refused), and the action's `permission`.
+- After the handler, the browser returns to the page (or `redirect`, which must be a path in the same company) with `message` shown at the top. A `PluginError` shows its text as an error. Any other error is logged and the user sees a generic message.
+- Handlers have 30 seconds.
+
+### UI kit
+
+Import MyGST's own components from the SDK so your pages look like the rest of the app in light and dark mode: `Card`, `CardHeader`, `Section`, `Grid`, `Stat`, `Table`, `Th`, `Td`, `Badge`, `Button`, `ButtonLink`, `Field`, `Input`, `Select`, `Textarea`, `Alert`, `Empty`, `FilterPills`, `Toolbar`, `Avatar`, `Pager`, `ActionForm`, `ActionButton` (a one-button form), `ConfirmAction` (a destructive action behind a second click) and `Hidden`.
+
+Useful `ctx` helpers for links: `ctx.pageUrl("leads", id)` → `/c/<company>/apps/<plugin>/leads/<id>`, `ctx.companyUrl("quotations/new")` → `/c/<company>/quotations/new`.
+
+### Scheduled jobs
+
+```ts
+jobs: [{ id: "reorder-alert", every: "daily", title: "Low stock email" }],
+// …
+api.schedule("reorder-alert", async (ctx) => { … });
+```
+
+- The cron tick (`/api/cron/tick`, every minute) runs each due job once **per company** where the plugin is active. Hourly jobs run once per clock hour; daily jobs run once a day from 06:00 IST.
+- A run is claimed before it starts, so it never runs twice for the same period. Each run has 30 seconds; errors are logged and count towards auto-pause, like events.
+- `ctx.user` is `null`. Use `ctx.mail.send({ toUserIds, subject, html })` (permission `mail:send`) to tell people.
+
+### Sidebar
+
+A plugin with more than one page in the sidebar gets its own collapsible section, titled with the plugin's name. Pages the user can't open are hidden. Use `inNav: false` for pages reached only by links. Detail screens can also live under a list page's path: `/apps/<id>/leads/<leadId>` reaches the `leads` page with `path = [leadId]`.
+
+### Reference plugin: Lead Manager
+
+`src/plugins/lead-manager` is a small CRM:
+
+| Piece | How it's done |
+|---|---|
+| Leads and their timeline | Two data tables: `leads` (indexed by stage, owner, customer and a search field; `value` is a number) and `activities` |
+| Pipeline, Leads, Follow-ups | Three pages in a "Lead Manager" sidebar section; a lead's detail and edit screens live under `leads/<id>` |
+| Staff see only their own leads | Capability `leads.viewAll` (default Owner, Accountant), checked in the plugin's own queries |
+| Convert to customer, quick quotation | Actions using `ctx.data.parties.upsert` and `ctx.data.documents.createQuotation` with `leadRef` |
+| Proposal / Won automatically | `quotation.created` and `invoice.issued` events, matched by `leadRef` or customer |
+| Morning email | A daily job using `ctx.mail.send` |
+| "Today's follow-ups" | A dashboard widget |
+
+Its tests (`tests/unit/lead-manager.test.ts`) show how to test actions, events and jobs with the in-memory test context.
 
 ---
 
@@ -279,18 +411,25 @@ api.route("GET", "export/*", async (request, { ctx, path }) => new Response("…
 | Member | Description |
 |---|---|
 | `pluginId`, `companyId`, `company` | The company the hook runs for (`id, legalName, tradeName, gstin, stateCode`). |
-| `user`, `role` | The signed-in user for pages, widgets, routes and filters. `null` in events (background work runs as the owner who enabled the plugin). |
+| `user`, `role` | The signed-in user for pages, widgets, routes, actions and filters. `null` in events and jobs (background work runs as the owner who enabled the plugin). |
+| `can(capability)` | Does the user hold one of your [role permissions](#role-permissions)? Always `true` in the background. |
 | `settings` | This company's settings for your plugin, with secrets decrypted and defaults applied. |
-| `storage.get/set/delete/list(prefix)` | JSON key-value storage, separate for each plugin **and** each company. Keys are 1–191 characters of `[A-Za-z0-9._:/-]`; values are at most 64 KB. |
-| `data.company()` | Company profile (`company:read`). |
+| `storage.get/set/delete/list(prefix)` | JSON key-value storage, separate for each plugin **and** each company. Keys are 1–191 characters of `[A-Za-z0-9._:/-]`; values are at most 64 KB. Good for settings-like state. |
+| `db.collection(name)` | Your [data tables](#data-tables). |
+| `mail.send({ toUserIds?, toPartyId?, subject, html })` | Email company members or one customer/supplier (`mail:send`, 100 a day per company). |
+| `data.company()`, `data.members()` | Company profile; the company's people `{ userId, name, email, roles }` (`company:read`). |
 | `data.documents.list({ type?, from?, to?, partyId?, limit? })`, `.get(id)` | Sales documents. `get` returns the full document with items (money in **paise**). |
 | `data.documents.setCustomField(id, key, field \| null)` | Set or remove your custom field (`documents:write`). |
 | `data.documents.createQuotation(body)` | Same body as `POST /api/v1/quotations` (`documents:write`). |
-| `data.parties.list({ search?, limit? })`, `.upsert(body)` | Customers and suppliers. `upsert` takes the same body as `POST /api/v1/parties/upsert`. |
-| `data.products.list(…)`, `data.payments.receivables(partyId?)`, `data.purchases.list(…)` | Read-only lists (amounts in rupees). |
+| `data.parties.list({ search?, limit? })`, `.get(id)`, `.upsert(body)` | Customers and suppliers. `upsert` takes the same body as `POST /api/v1/parties/upsert`. |
+| `data.products.list(…)`, `.get(id)`, `.setCustomField(id, key, { label, value } \| null)` | Products. Custom fields (`products:write`) show on the product page. |
+| `data.payments.receivables(partyId?)`, `.list({ from?, to?, partyId?, limit? })` | Outstanding invoices; payments in and out. |
+| `data.purchases.list(…)`, `.get(id)` | Purchase invoices; `get` includes `items`. |
+| `data.purchaseOrders.list({ status?, from?, to?, limit? })`, `.get(id)` | Purchase orders; `get` includes items with `billedQty` and `remaining`. |
 | `http.fetch(url, init)` | `fetch` with a 10 s timeout. It does not follow redirects, and in production it refuses private and loopback addresses. |
 | `log.info/warn/error(message)` | Written to the plugin log that admins see (keep it short, never log secrets). |
 | `appUrl(path)` | An absolute MyGST URL, for links in messages. |
+| `pageUrl(slug?, ...path)`, `companyUrl(path)`, `actionUrl(name)` | Paths to your pages, to MyGST pages in this company, and to a form action. |
 
 Plugins never get a database client. Everything is scoped to `ctx.companyId`.
 
@@ -348,7 +487,10 @@ describe("sms-alerts", () => {
 ```
 
 What the helpers give you:
-- `ctx.logs`, `ctx.store` (storage) and `ctx.requests` are inspectable.
+- `ctx.logs`, `ctx.store` (storage), `ctx.requests` and `ctx.mails` are inspectable.
+- `ctx.db` is an in-memory version of your data tables with the same field rules; `ctx.records` holds the rows.
+- `p.runAction(name, values, ctx)` runs a form action (returning `{ message, redirect }` or `{ error }`), and `p.runJob(id, ctx)` runs a job.
+- Pass `user` and `capabilities: [...]` to test as a signed-in user with only some permissions.
 - Unstubbed `ctx.data` methods throw a clear error.
 
 Run your tests with `npx vitest run tests/unit/plugins`. The repo's own tests for the example plugins are in `tests/unit/plugins.test.ts` and `tests/integration/plugins.test.ts`. On Windows, run Vitest from PowerShell or cmd, not Git Bash.
@@ -487,7 +629,7 @@ Use `Authorization: Bearer <apiKey>` against `apiBaseUrl`. The key only works fo
 
 ---
 
-## Package & upload
+## Package, upload and download
 
 Admins can add a code plugin without a deploy:
 
@@ -496,6 +638,7 @@ Admins can add a code plugin without a deploy:
    ```bash
    npm run plugin:pack -- <id>                 # → dist-plugins/<id>-<version>.mygst-plugin.js
    npm run plugin:pack -- <id> --id <new-id>   # same code under another id (e.g. to test next to the built-in copy)
+   npm run plugin:pack -- --all                # every folder in src/plugins (npm run build does this)
    ```
    The packer bundles your folder and its npm dependencies into one CommonJS file and prints its **SHA-256**. Publish that checksum with the file.
    `react`, `react/jsx-runtime` and `@/lib/plugins/sdk` are left out: MyGST provides them. Importing anything else from MyGST (`@/…`) fails the pack.
@@ -509,6 +652,11 @@ Admins can add a code plugin without a deploy:
 - **Updating:** upload a newer version of the same id. It replaces the code in place, keeping installs, settings and data. An older version is refused unless *allow downgrade* is ticked. If the new version asks for more permissions, owners are asked to accept them again.
 - **Removing:** uninstalling an uploaded plugin deletes its code, settings and data.
 - An id already used by a built-in or external plugin can't be uploaded.
+
+**Downloading (super admins only)**
+- **Admin → Plugins** has a **Download** link on each plugin (and a Download card on its page), shown only to super admins: people with the built-in *Super admin* platform role or in `SUPER_ADMIN_EMAILS`. It can't be given to custom admin roles.
+- Built-in and uploaded plugins download as `<id>-<version>.mygst-plugin.js`, ready to upload on another MyGST. Built-in ones are packed during `npm run build`; if a file is missing it is packed on demand. External plugins download their `manifest.json`.
+- The response carries the file's SHA-256 (`X-Checksum-SHA256`), and each download is written to the admin audit log.
 
 ---
 

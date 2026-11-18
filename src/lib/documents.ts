@@ -4,7 +4,8 @@ import type { Prisma } from "@/generated/prisma/client";
 import type { DocType } from "@/generated/prisma/enums";
 import { UserError } from "./action";
 import { db, runTx, type Tx } from "./db";
-import { NOTE_REASONS, isNote, kindOfType } from "./doc-kinds";
+import { NOTE_REASONS, isNote, kindOfType, salesType } from "./doc-kinds";
+import { eventItems } from "./events/items";
 import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { financialYear, todayIST } from "./gst/fy";
@@ -190,6 +191,19 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
       await tx.document.update({ where: { id }, data: header });
       await tx.documentItem.deleteMany({ where: { documentId: id } });
       docId = id;
+      await emitEvent(tx, companyId, "document.updated", {
+        id,
+        type,
+        number: existing.number,
+        status: existing.status,
+        total: totals.grandTotal / 100,
+        amount: totals.grandTotal / 100,
+        url: documentUrl(companyId, type, id),
+        partyId: party.id,
+        partyName: party.name,
+        date: input.date,
+        items: eventItems(lines),
+      });
     } else {
       const num = await allocateNumber(tx, companyId, type, input.date);
       // An invoice converted from a quotation inherits its leadRef, so Lead Manager can follow it.
@@ -222,6 +236,8 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
         amount: totals.grandTotal / 100,
         leadRef: created.externalRef ?? undefined,
         partyId: party.id,
+        partyName: party.name,
+        items: eventItems(lines),
       };
       if (type === "QUOTATION") {
         await emitEvent(tx, companyId, "quotation.created", { ...base, id: docId, status: "OPEN", url: documentUrl(companyId, type, docId), date: input.date });
@@ -309,7 +325,7 @@ async function runDocumentFilters(ctx: CompanyContext, type: DocType, id: string
   const party = await db.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId }, select: { id: true, name: true, gstin: true, stateCode: true, customFields: true } });
   if (!party) return { notes: input.notes, customFields: null }; // the transaction reports the missing party
   const args = {
-    type,
+    type: salesType(type),
     documentId: id,
     input: {
       partyId: input.partyId,
@@ -321,7 +337,7 @@ async function runDocumentFilters(ctx: CompanyContext, type: DocType, id: string
     },
     party: { ...party, customFields: (party.customFields ?? {}) as Record<string, unknown> },
   };
-  const scope = { companyId: ctx.companyId, user: ctx.user, role: ctx.role };
+  const scope = { companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx };
   await applyFilters(scope, "document.validate", undefined, args);
   const existing = id ? await db.document.findFirst({ where: { id, companyId: ctx.companyId }, select: { customFields: true } }) : null;
   const before = { notes: input.notes, customFields: { ...((existing?.customFields ?? {}) as unknown as Record<string, { label: string; value: string; onPdf?: boolean }>) } };

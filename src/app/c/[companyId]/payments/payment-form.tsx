@@ -149,13 +149,13 @@ export function PaymentForm({
 
       <Card>
         <div className="flex items-center justify-between p-3">
-          <h2 className="font-semibold">Allocate against {direction === "RECEIVED" ? "invoices" : "bills"}</h2>
+          <h2 className="font-semibold">Allocate against {direction === "RECEIVED" ? "invoices" : "purchase invoices"}</h2>
           <Button type="button" variant="secondary" onClick={autoAllocate} disabled={!items.length || !amountP}>
             Auto-allocate (oldest first)
           </Button>
         </div>
         {!partyId ? (
-          <p className="px-3 pb-4 text-muted">Select a party to see open {direction === "RECEIVED" ? "invoices" : "bills"}.</p>
+          <p className="px-3 pb-4 text-muted">Select a party to see open {direction === "RECEIVED" ? "invoices" : "purchase invoices"}.</p>
         ) : items.length === 0 ? (
           <p className="px-3 pb-4 text-muted">No open documents. The full amount will be recorded as an advance.</p>
         ) : (

@@ -1,7 +1,7 @@
-import { BookOpen, Puzzle } from "lucide-react";
+import { BookOpen, Download, Puzzle } from "lucide-react";
 import Link from "next/link";
 import { Alert, Badge, Card, CardHeader, Empty, PageHeader, Table, Td, Th } from "@/components/ui";
-import { adminCan, requireAdmin } from "@/lib/admin";
+import { adminCan, isSuperAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { isPluginActive } from "@/lib/plugins/access";
 import { syncCodePlugins } from "@/lib/plugins/manage";
@@ -23,6 +23,7 @@ export default async function AdminPluginsPage() {
     db.company.count(),
   ]);
   const companyIds = (await db.company.findMany({ select: { id: true } })).map((c) => c.id);
+  const canDownload = isSuperAdmin(admin);
 
   return (
     <>
@@ -94,7 +95,17 @@ export default async function AdminPluginsPage() {
                     <Td className="text-right tabular-nums">
                       {p.status === "INSTALLED" ? `${active} / ${companyCount}` : "—"}
                     </Td>
-                    <Td className="text-right">
+                    <Td className="whitespace-nowrap text-right">
+                      {canDownload && p.status !== "MISSING" && (
+                        <a
+                          href={`/admin/plugins/${p.id}/download`}
+                          download
+                          title={p.kind === "EXTERNAL" ? "Download manifest.json" : "Download the plugin file (.mygst-plugin.js)"}
+                          className="mr-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        >
+                          <Download size={14} /> Download
+                        </a>
+                      )}
                       <Link href={`/admin/plugins/${p.id}`} className="text-sm font-medium text-primary hover:underline">
                         Manage
                       </Link>

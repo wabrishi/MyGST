@@ -9,6 +9,7 @@ export const DEFAULT_PREFIX: Record<DocType, string> = {
   QUOTATION: "QT/",
   CREDIT_NOTE: "CN/",
   DEBIT_NOTE: "DN/",
+  PURCHASE_ORDER: "PO/",
 };
 
 export const DOC_LABEL: Record<DocType, string> = {
@@ -16,6 +17,7 @@ export const DOC_LABEL: Record<DocType, string> = {
   QUOTATION: "Quotation",
   CREDIT_NOTE: "Credit Note",
   DEBIT_NOTE: "Debit Note",
+  PURCHASE_ORDER: "Purchase Order",
 };
 
 /** Prefix to use for a new FY: the most recently configured one for this doc type, else the default. */
