@@ -1,163 +1,176 @@
 "use client";
 
-import {
-  BarChart3,
-  Bell,
-  Blocks,
-  Boxes,
-  Calculator,
-  Calendar,
-  ClipboardList,
-  Cloud,
-  Mail,
-  MessageSquare,
-  Puzzle,
-  QrCode,
-  Send,
-  Truck,
-  Wallet,
-  FileMinus,
-  FilePlus,
-  FileText,
-  LayoutDashboard,
-  Package,
-  ReceiptIndianRupee,
-  ScrollText,
-  Settings,
-  ShoppingCart,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { ChevronDown, Puzzle, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useId, useState, useSyncExternalStore, type ReactNode } from "react";
 import { cn } from "@/components/ui";
-import { SETTINGS_PERMISSIONS, type Permission } from "@/lib/permissions";
+import { APPS_SECTION_KEY, applyLayout, CORE_SECTIONS, DASHBOARD_ITEM, DEFAULT_LAYOUT, PLUGIN_ICONS, type NavLayout } from "@/lib/nav";
 
-/** `perm`: shown when the member holds it (or any of them, for a list). */
-type Item = { href: string; label: string; icon: LucideIcon; perm?: Permission | Permission[] };
+export type AppNavItem = { href: string; label: string; icon: string; section?: string; sectionKey: string; itemKey: string };
 
-/** Icons plugins may name in their manifest (anything else shows the puzzle piece). */
-const PLUGIN_ICONS: Record<string, LucideIcon> = {
-  Puzzle, Bell, Blocks, Boxes, Calculator, Calendar, ClipboardList, Cloud, Mail, MessageSquare, QrCode, Send, Truck, Wallet,
-  BarChart3, FileText, Package, ReceiptIndianRupee, ScrollText, ShoppingCart, Users, Settings, LayoutDashboard,
-};
+/** One link, already resolved to an absolute path. */
+type Link_ = { key: string; href: string; label: string; icon: LucideIcon; external?: boolean; activeAlso?: string };
+type Section = { key: string; title: string; items: Link_[] };
 
-export type AppNavItem = { href: string; label: string; icon: string; section?: string };
+const COLLAPSED_KEY = "mygst.nav.collapsed";
 
-const SECTIONS: Array<{ title?: string; items: Item[] }> = [
-  { items: [{ href: "dashboard", label: "Dashboard", icon: LayoutDashboard }] },
-  {
-    title: "Sales",
-    items: [
-      { href: "invoices", label: "Invoices", icon: FileText },
-      { href: "quotations", label: "Quotations", icon: ScrollText },
-      { href: "credit-notes", label: "Credit notes", icon: FileMinus },
-      { href: "debit-notes", label: "Debit notes", icon: FilePlus },
-      { href: "payments", label: "Payments", icon: ReceiptIndianRupee, perm: "payments.view" },
-    ],
-  },
-  {
-    title: "Purchases",
-    items: [
-      { href: "purchase-orders", label: "Purchase orders", icon: ClipboardList, perm: "purchaseOrders.view" },
-      { href: "purchases", label: "Purchase invoices", icon: ShoppingCart, perm: "purchases.view" },
-    ],
-  },
-  {
-    title: "Masters",
-    items: [
-      { href: "parties", label: "Parties", icon: Users },
-      { href: "products", label: "Products", icon: Package },
-    ],
-  },
-  {
-    title: "Insights",
-    items: [
-      { href: "reports", label: "Reports", icon: BarChart3, perm: "reports.view" },
-      { href: "settings", label: "Settings", icon: Settings, perm: SETTINGS_PERMISSIONS },
-    ],
-  },
-];
+/**
+ * Collapsed sections, remembered per browser in localStorage (shared by every tab and by the desktop
+ * sidebar and mobile drawer). Read through useSyncExternalStore: the server and first render see "all
+ * open", so there's no hydration mismatch; if storage is blocked everything simply stays open.
+ */
+const NONE: string[] = [];
+const listeners = new Set<() => void>();
+let snapshot: { raw: string | null; keys: string[] } = { raw: null, keys: NONE };
 
-/** Plugin links grouped: each multi-page plugin under its own title, the rest under "Apps". */
-function appGroups(apps: AppNavItem[]) {
-  const groups = new Map<string, AppNavItem[]>();
-  for (const a of apps) {
-    const key = a.section ?? "Apps";
-    groups.set(key, [...(groups.get(key) ?? []), a]);
+function readRaw() {
+  try {
+    return localStorage.getItem(COLLAPSED_KEY);
+  } catch {
+    return null;
   }
-  return [...groups].map(([title, items]) => ({ title, items }));
 }
 
-export function SideNav({ companyId, perms, apps = [], onNavigate }: { companyId: string; perms: string[]; apps?: AppNavItem[]; onNavigate?: () => void }) {
-  const pathname = usePathname();
+function getCollapsed(): string[] {
+  const raw = readRaw();
+  if (raw !== snapshot.raw) {
+    let keys = NONE;
+    try {
+      const v = JSON.parse(raw ?? "[]");
+      if (Array.isArray(v)) keys = v.filter((x): x is string => typeof x === "string");
+    } catch {
+      /* ignore */
+    }
+    snapshot = { raw, keys };
+  }
+  return snapshot.keys;
+}
+
+function setCollapsed(keys: string[]) {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify(keys));
+  } catch {
+    /* storage blocked: sections just stay open */
+  }
+  for (const l of listeners) l();
+}
+
+function subscribe(onChange: () => void) {
+  listeners.add(onChange);
+  const onStorage = (e: StorageEvent) => e.key === COLLAPSED_KEY && onChange();
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
+
+/** Core sections the member may see, then plugin sections; all in the order saved in Admin → Menu. */
+function buildSections(companyId: string, perms: string[], apps: AppNavItem[], layout: NavLayout): Section[] {
+  const allowed = (perm?: string | readonly string[]) => !perm || (Array.isArray(perm) ? perm : [perm]).some((p) => perms.includes(p));
+  const core: Section[] = CORE_SECTIONS.map((s) => ({
+    key: s.key,
+    title: s.title,
+    items: s.items
+      .filter((i) => allowed(i.perm as string | string[] | undefined))
+      .map((i) => ({ key: i.key, href: `/c/${companyId}/${i.href}`, label: i.label, icon: i.icon, ...(i.href === "settings" && { activeAlso: `/c/${companyId}/setup` }) })),
+  }));
+  const plugin = new Map<string, Section>();
+  for (const a of apps) {
+    const s = plugin.get(a.sectionKey) ?? { key: a.sectionKey, title: a.sectionKey === APPS_SECTION_KEY ? "Apps" : (a.section ?? "Apps"), items: [] };
+    s.items.push({ key: a.itemKey, href: a.href, label: a.label, icon: PLUGIN_ICONS[a.icon] ?? Puzzle, external: /^https:\/\//i.test(a.href) });
+    plugin.set(a.sectionKey, s);
+  }
+  return applyLayout([...core, ...plugin.values()], layout).filter((s) => s.items.length);
+}
+
+const isActive = (pathname: string, l: Pick<Link_, "href" | "external" | "activeAlso">) =>
+  !l.external && (pathname === l.href || pathname.startsWith(l.href + "/") || (!!l.activeAlso && pathname.startsWith(l.activeAlso)));
+
+function NavLink({ link, active, onNavigate }: { link: Link_; active: boolean; onNavigate?: () => void }) {
+  const Icon = link.icon;
   return (
-    <nav className="flex flex-col gap-5 px-3" aria-label="Main">
-      {SECTIONS.map((section, si) => {
-        const items = section.items.filter((i) => !i.perm || (Array.isArray(i.perm) ? i.perm : [i.perm]).some((p) => perms.includes(p)));
-        if (!items.length) return null;
+    <Link
+      href={link.href}
+      onClick={onNavigate}
+      {...(link.external && { target: "_blank", rel: "noreferrer" })}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors",
+        active ? "bg-primary-soft text-primary" : "text-foreground/75 hover:bg-subtle hover:text-foreground",
+      )}
+    >
+      <Icon size={17} className={cn("shrink-0 transition-colors", active ? "text-primary" : "text-muted group-hover:text-foreground")} />
+      <span className="truncate">{link.label}</span>
+    </Link>
+  );
+}
+
+/** A titled group whose header expands / collapses it. */
+function NavSection({ section, open, onToggle, children }: { section: Section; open: boolean; onToggle: () => void; children: ReactNode }) {
+  const id = useId();
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={id}
+        className="group flex items-center justify-between rounded-md px-2.5 pb-1.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted/80 hover:text-foreground"
+      >
+        <span>{section.title}</span>
+        <ChevronDown size={14} aria-hidden className={cn("transition-transform duration-150", !open && "-rotate-90")} />
+      </button>
+      <div id={id} hidden={!open} className="flex flex-col gap-0.5">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function SideNav({
+  companyId,
+  perms,
+  apps = [],
+  layout = DEFAULT_LAYOUT,
+  onNavigate,
+}: {
+  companyId: string;
+  perms: string[];
+  apps?: AppNavItem[];
+  layout?: NavLayout;
+  onNavigate?: () => void;
+}) {
+  const pathname = usePathname();
+  const sections = buildSections(companyId, perms, apps, layout);
+  const collapsed = useSyncExternalStore(subscribe, getCollapsed, () => NONE);
+  // The section holding the current page shows open even if it was collapsed, until the user closes it
+  // again on this page.
+  const activeKey = sections.find((s) => s.items.some((l) => isActive(pathname, l)))?.key;
+  const [closedHere, setClosedHere] = useState<string | null>(null);
+  const isOpen = (key: string) => !collapsed.includes(key) || (key === activeKey && closedHere !== `${key}@${pathname}`);
+  const toggle = (key: string) => {
+    if (isOpen(key)) {
+      setCollapsed([...new Set([...collapsed, key])]);
+      if (key === activeKey) setClosedHere(`${key}@${pathname}`);
+    } else {
+      setCollapsed(collapsed.filter((k) => k !== key));
+      setClosedHere(null);
+    }
+  };
+  const dashboard: Link_ = { key: DASHBOARD_ITEM.key, href: `/c/${companyId}/${DASHBOARD_ITEM.href}`, label: DASHBOARD_ITEM.label, icon: DASHBOARD_ITEM.icon };
+
+  return (
+    <nav className="flex flex-col gap-4 px-3" aria-label="Main">
+      <NavLink link={dashboard} active={isActive(pathname, dashboard)} onNavigate={onNavigate} />
+      {sections.map((s) => {
         return (
-          <div key={si} className="flex flex-col gap-0.5">
-            {section.title && <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted/80">{section.title}</div>}
-            {items.map((i) => {
-              const href = `/c/${companyId}/${i.href}`;
-              const active = pathname === href || pathname.startsWith(href + "/") || (i.href === "settings" && pathname.startsWith(`/c/${companyId}/setup`));
-              const Icon = i.icon;
-              return (
-                <Link
-                  key={i.href}
-                  href={href}
-                  onClick={onNavigate}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors",
-                    active ? "bg-primary-soft text-primary" : "text-foreground/75 hover:bg-subtle hover:text-foreground",
-                  )}
-                >
-                  <Icon size={17} className={cn("transition-colors", active ? "text-primary" : "text-muted group-hover:text-foreground")} />
-                  {i.label}
-                </Link>
-              );
-            })}
-          </div>
-        );
-      })}
-      {appGroups(apps).map((g) => {
-        const links = g.items.map((a) => {
-          const external = /^https:\/\//i.test(a.href);
-          const active = !external && (pathname === a.href || pathname.startsWith(a.href + "/"));
-          const Icon = PLUGIN_ICONS[a.icon] ?? Puzzle;
-          return (
-            <Link
-              key={a.href}
-              href={a.href}
-              onClick={onNavigate}
-              {...(external && { target: "_blank", rel: "noreferrer" })}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13.5px] font-medium transition-colors",
-                active ? "bg-primary-soft text-primary" : "text-foreground/75 hover:bg-subtle hover:text-foreground",
-              )}
-            >
-              <Icon size={17} className={cn("transition-colors", active ? "text-primary" : "text-muted group-hover:text-foreground")} />
-              <span className="truncate">{a.label}</span>
-            </Link>
-          );
-        });
-        // A plugin with several pages gets a collapsible section of its own.
-        return g.title === "Apps" ? (
-          <div key="apps" className="flex flex-col gap-0.5">
-            <div className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted/80">Apps</div>
-            {links}
-          </div>
-        ) : (
-          <details key={g.title} open className="group/sec flex flex-col gap-0.5">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-2.5 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted/80 hover:text-foreground">
-              <span>{g.title}</span>
-              <span aria-hidden className="text-[10px] transition-transform group-open/sec:rotate-90">▸</span>
-            </summary>
-            <div className="flex flex-col gap-0.5">{links}</div>
-          </details>
+          <NavSection key={s.key} section={s} open={isOpen(s.key)} onToggle={() => toggle(s.key)}>
+            {s.items.map((l) => (
+              <NavLink key={l.key} link={l} active={isActive(pathname, l)} onNavigate={onNavigate} />
+            ))}
+          </NavSection>
         );
       })}
     </nav>

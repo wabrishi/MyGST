@@ -32,6 +32,7 @@ export const ADMIN_PERMISSION_GROUPS = [
       ["backups.manage", "Platform backups"],
       ["audit.view", "Read the audit log"],
       ["system.view", "See system health"],
+      ["menu.manage", "Arrange the company sidebar menu"],
       ["roles.manage", "Manage admin roles and who has them"],
     ],
   },
@@ -68,6 +69,7 @@ export const ADMIN_PAGES: ReadonlyArray<{ href: string; label: string; perm: Adm
   { href: "/admin/plugins", label: "Plugins", perm: "plugins.manage" },
   { href: "/admin/audit", label: "Audit", perm: "audit.view" },
   { href: "/admin/system", label: "System", perm: "system.view" },
+  { href: "/admin/menu", label: "Menu", perm: "menu.manage" },
   { href: "/admin/roles", label: "Roles", perm: "roles.manage" },
   { href: "/admin/backups", label: "Backups", perm: "backups.manage" },
 ];

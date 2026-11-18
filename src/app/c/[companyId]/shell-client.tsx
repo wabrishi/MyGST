@@ -7,11 +7,26 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Avatar, Badge, cn } from "@/components/ui";
 import { authClient } from "@/lib/auth-client";
+import type { NavLayout } from "@/lib/nav";
 import { SideNav, type AppNavItem } from "./side-nav";
 
 // ───────────────────────── Mobile drawer ─────────────────────────
 
-export function MobileNav({ header, top, companyId, perms, apps = [] }: { header: ReactNode; top: ReactNode; companyId: string; perms: string[]; apps?: AppNavItem[] }) {
+export function MobileNav({
+  header,
+  top,
+  companyId,
+  perms,
+  apps = [],
+  layout,
+}: {
+  header: ReactNode;
+  top: ReactNode;
+  companyId: string;
+  perms: string[];
+  apps?: AppNavItem[];
+  layout?: NavLayout;
+}) {
   const [open, setOpen] = useState(false); // links close the drawer via onNavigate
   useEffect(() => {
     if (!open) return;
@@ -47,7 +62,7 @@ export function MobileNav({ header, top, companyId, perms, apps = [] }: { header
               </button>
             </div>
             {top}
-            <SideNav companyId={companyId} perms={perms} apps={apps} onNavigate={() => setOpen(false)} />
+            <SideNav companyId={companyId} perms={perms} apps={apps} layout={layout} onNavigate={() => setOpen(false)} />
           </div>
         </div>,
           document.body,

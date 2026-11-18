@@ -1,5 +1,6 @@
 import "server-only";
 import { decryptSecret } from "../backup/crypto";
+import { APPS_SECTION_KEY, pluginSectionKey } from "../nav";
 import { canPlugin, canUseApp } from "../permissions";
 import type { CompanyContext } from "../tenant";
 import { pluginLog } from "./log";
@@ -14,6 +15,9 @@ export interface PluginNavItem {
   icon: string;
   /** Plugins with several pages get their own sidebar section (named after the plugin). */
   section?: string;
+  /** Stable keys for the menu order saved in Admin → Menu: "apps" or "plugin:<id>", and the item. */
+  sectionKey: string;
+  itemKey: string;
 }
 
 
@@ -28,11 +32,23 @@ export async function pluginNav(ctx: CompanyContext): Promise<PluginNavItem[]> {
   const items: PluginNavItem[] = [];
   for (const e of entries) {
     const pages = e.manifest.pages.filter((p) => p.inNav && canOpenPage(ctx, e, p));
-    const section = pages.length > 1 ? e.manifest.name : undefined;
-    for (const p of pages) items.push({ href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`, label: p.title, icon: p.icon ?? e.manifest.icon, ...(section && { section }) });
+    const own = pages.length > 1;
+    for (const p of pages) {
+      items.push({
+        href: `/c/${ctx.companyId}/apps/${e.plugin.id}/${p.slug}`,
+        label: p.title,
+        icon: p.icon ?? e.manifest.icon,
+        ...(own && { section: e.manifest.name }),
+        sectionKey: own ? pluginSectionKey(e.plugin.id) : APPS_SECTION_KEY,
+        itemKey: own ? p.slug : `${e.plugin.id}/${p.slug}`,
+      });
+    }
   }
   const extra = await applyFilters({ companyId: ctx.companyId, user: ctx.user, role: ctx.role, member: ctx }, "nav.items", [] as LinkItem[], {});
-  for (const l of extra.slice(0, 10)) items.push({ href: companyHref(ctx.companyId, l.href), label: String(l.label).slice(0, 40), icon: "Puzzle" });
+  for (const l of extra.slice(0, 10)) {
+    const href = companyHref(ctx.companyId, l.href);
+    items.push({ href, label: String(l.label).slice(0, 40), icon: "Puzzle", sectionKey: APPS_SECTION_KEY, itemKey: `link:${l.href}`.slice(0, 120) });
+  }
   return items;
 }
 
