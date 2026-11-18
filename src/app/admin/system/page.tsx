@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { CheckCircle2, XCircle } from "lucide-react";
 import Link from "next/link";
 import { Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
-import { requireAdmin } from "@/lib/admin";
+import { isSuperAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { mailEnabled } from "@/lib/mail";
-import { RetryEventsButton } from "./system-client";
+import { autoMigrateEnabled, lastMigrationRun } from "@/lib/migrate";
+import { ApplyMigrationsButton, RetryEventsButton } from "./system-client";
 
 export const metadata = { title: "System" };
 
@@ -62,7 +63,8 @@ async function loadSystem() {
 }
 
 export default async function AdminSystemPage() {
-  await requireAdmin("system.view");
+  const admin = await requireAdmin("system.view");
+  const startup = lastMigrationRun();
   const { outbox, dead, targets, pluginErrors, paused, cron, applied, version } = await loadSystem();
   const count = (s: string) => outbox.find((o) => o.status === s)?._count ?? 0;
   const cronAt = (cron?.value as { at?: string } | null)?.at;
@@ -208,10 +210,20 @@ export default async function AdminSystemPage() {
           </Card>
           <Card className="p-4 text-sm">
             <h2 className="mb-2 font-semibold">Migrations</h2>
-            {pending.length > 0 && (
-              <p className="mb-2 text-xs text-danger">
-                Pending: {pending.join(", ")}. Run <code>npx prisma migrate deploy</code> (or use the deploy:build build command).
-              </p>
+            <p className="mb-2 text-xs text-muted">
+              {autoMigrateEnabled() ? "Applied automatically when the app starts." : "Automatic migration is off (AUTO_MIGRATE=false)."}
+              {startup && ` Last start: ${when(startup.at)}${startup.applied.length ? `, applied ${startup.applied.length}` : ""}.`}
+            </p>
+            {startup?.error && <p className="mb-2 break-words text-xs text-danger">At start: {startup.error}</p>}
+            {(pending.length > 0 || failedMig.length > 0) && (
+              <div className="mb-3 flex flex-col gap-2">
+                {pending.length > 0 && <p className="text-xs text-danger">Pending: {pending.join(", ")}.</p>}
+                {isSuperAdmin(admin) ? (
+                  <ApplyMigrationsButton />
+                ) : (
+                  <p className="text-xs text-muted">A super admin can apply them here, or restart the app.</p>
+                )}
+              </div>
             )}
             <ul className="max-h-72 overflow-auto font-mono text-[11px]">
               {(applied ?? []).map((m) => (

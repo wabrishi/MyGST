@@ -1,4 +1,18 @@
 /**
+ * Runs once when the server starts, before it handles requests:
+ * 1. Applies pending database migrations (src/lib/migrate.ts). Done here, not only in `npm start`,
+ *    because hosts like Hostinger may start the app with `next start` directly.
+ * 2. Optional built-in backup scheduler (below).
+ */
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { autoMigrateEnabled, rememberMigrationRun, runMigrations } = await import("./lib/migrate");
+    if (autoMigrateEnabled()) rememberMigrationRun(await runMigrations());
+    await startBackupScheduler();
+  }
+}
+
+/**
  * Optional built-in backup scheduler (opt-in: BACKUP_INTERNAL_SCHEDULER="true").
  * Every 15 minutes it calls this app's own /api/cron/backup endpoint; the endpoint only backs up
  * targets not backed up in the last ~11 hours, so the effective schedule is twice a day.
@@ -6,8 +20,7 @@
  * On Hostinger leave it off and use a Cron Job instead: background timers stop on restarts and the
  * app may not be able to reach itself over the loopback address.
  */
-export async function register() {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+async function startBackupScheduler() {
   if (process.env.BACKUP_INTERNAL_SCHEDULER !== "true" || process.env.NODE_ENV === "test") return;
 
   const g = globalThis as unknown as { __mygstBackupScheduler?: boolean };

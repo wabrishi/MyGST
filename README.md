@@ -72,8 +72,9 @@ Hostinger's managed hosting provides **MySQL/MariaDB** and **Node.js app hosting
 2. **Push this project to a private GitHub repository.** `.env` is git-ignored.
 3. **Create the Node.js app.** In hPanel, go to *Websites → Add website → Node.js app*, import the GitHub repo, and pick framework **Next.js**.
    - **Node.js version: 22 or 24.** Node 20 is too old for several dependencies.
-   - **Build command:** `npm run build` (runs `prisma generate` + `next build --webpack`). The build uses webpack because Turbopack's separate CSS worker processes are killed on Hostinger's build servers.
-   - **Start command:** `npm start` (runs `prisma migrate deploy` and then `next start`). Database migrations are applied automatically when the app starts, so the build doesn't need database access.
+   - **Build command:** `npm run build` (packs the plugins, runs `prisma generate` and `next build --webpack`). The build uses webpack because Turbopack's separate CSS worker processes are killed on Hostinger's build servers.
+   - **Start command:** `npm start`. If hPanel doesn't let you set it, that's fine: see migrations below.
+   - **Database migrations are applied automatically when the app starts**, however Hostinger starts it (`npm start` or `next start` directly). The server applies any pending migration before it handles the first request, and logs `[migrate] applying …`. The build doesn't need database access. Set `AUTO_MIGRATE=false` to turn this off.
    - **Output directory:** `.next`
 4. **Set environment variables** in the app settings, using `.env.example` as the reference:
    - `DATABASE_URL=mysql://USER:PASSWORD@HOST:3306/DBNAME`. URL-encode special characters in the password.
@@ -87,7 +88,10 @@ Hostinger's managed hosting provides **MySQL/MariaDB** and **Node.js app hosting
 Notes:
 - Prisma 7 uses a pure-JS driver (`@prisma/adapter-mariadb`), so no native engine binaries are needed on shared hosting.
 - Company logos are stored in the database, because the app file system is replaced on every deploy.
-- `prisma migrate deploy` does not need a shadow database, so a normal Hostinger DB user is enough. (`prisma migrate dev` is for local use only.)
+- Migrations need no shadow database, so a normal Hostinger DB user is enough. (`prisma migrate dev` is for local use only.)
+- **Checking migrations:** *Admin → System → Migrations* lists what's applied, what's pending and any error from the last start. A super admin can click **Apply pending migrations** there instead of restarting.
+- **If a migration fails,** the app keeps running on the old schema and the error shows on *Admin → System*. Later starts don't retry it until it's resolved: fix the cause, then mark it with `npx prisma migrate resolve --rolled-back <name>` (to retry) or `--applied <name>` (if you finished it by hand), and restart or click **Apply pending migrations**.
+- **An existing database without migration history** (the `_prisma_migrations` table is missing) is never touched automatically; baseline it first.
 
 ## Backups to Google Drive
 

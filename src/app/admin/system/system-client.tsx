@@ -2,7 +2,19 @@
 
 import { useAction } from "@/components/form-utils";
 import { Button } from "@/components/ui";
-import { adminRetryFailedEvents } from "./actions";
+import { adminApplyMigrations, adminRetryFailedEvents } from "./actions";
+
+export function ApplyMigrationsButton() {
+  const { execute, pending, error, message } = useAction(adminApplyMigrations);
+  return (
+    <span className="flex flex-col items-start gap-1">
+      <Button size="sm" disabled={pending} onClick={() => execute()}>
+        {pending ? "Applying…" : "Apply pending migrations"}
+      </Button>
+      {(error || message) && <span className={error ? "text-xs text-danger" : "text-xs text-muted"}>{error || message}</span>}
+    </span>
+  );
+}
 
 export function RetryEventsButton({ disabled }: { disabled: boolean }) {
   const { execute, pending, error, message } = useAction(adminRetryFailedEvents);
