@@ -21,7 +21,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
         />
         <div className="relative flex items-center gap-2 text-lg font-semibold">
           <LogoMark size={30} />
-          MyGST
+          MyGSTBook
         </div>
         <div className="relative mt-auto max-w-md">
           <h2 className="text-3xl font-semibold leading-tight tracking-tight">GST billing that keeps your books return-ready.</h2>
@@ -40,7 +40,7 @@ export default function AuthLayout({ children }: LayoutProps<"/">) {
             ))}
           </ul>
         </div>
-        <p className="relative mt-12 text-xs text-indigo-100/50">© {new Date().getFullYear()} MyGST</p>
+        <p className="relative mt-12 text-xs text-indigo-100/50">© {new Date().getFullYear()} MyGSTBook</p>
       </section>
 
       {/* Form */}

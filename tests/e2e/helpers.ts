@@ -11,10 +11,14 @@ export function makeGstin(state: string) {
 
 export const uniqueEmail = (tag: string) => `${tag}.${Date.now()}.${Math.floor(Math.random() * 1e4)}@e2e.test`;
 
-export async function signUp(page: Page, name: string, email: string, password = "password123") {
+/** A valid-looking Indian mobile number (sign-up requires one). */
+export const testMobile = () => `9${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
+
+export async function signUp(page: Page, name: string, email: string, password = "password123", mobile = testMobile()) {
   await page.goto("/signup");
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Mobile number").fill(mobile);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByLabel("Confirm password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();

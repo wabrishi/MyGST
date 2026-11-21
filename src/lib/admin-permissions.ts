@@ -13,6 +13,13 @@ export const ADMIN_PERMISSION_GROUPS = [
     ],
   },
   {
+    label: "Website",
+    items: [
+      ["messages.view", "Read and answer website contact messages"],
+      ["website.manage", "Edit the public website's contact details (mobile, email, address)"],
+    ],
+  },
+  {
     label: "Users",
     items: [
       ["users.view", "See all users"],
@@ -47,7 +54,7 @@ export const PLATFORM_ROLE_ID: Record<PlatformRoleKey, string> = { SUPER_ADMIN: 
 
 export const BUILTIN_ADMIN_PERMISSIONS: Record<PlatformRoleKey, readonly AdminPermission[]> = {
   SUPER_ADMIN: ALL_ADMIN_PERMISSIONS,
-  SUPPORT: ["admin.dashboard", "companies.view", "users.view", "users.manage", "audit.view"],
+  SUPPORT: ["admin.dashboard", "companies.view", "users.view", "users.manage", "audit.view", "messages.view"],
   VIEWER: ["admin.dashboard", "companies.view", "system.view"],
 };
 
@@ -66,6 +73,8 @@ export const ADMIN_PAGES: ReadonlyArray<{ href: string; label: string; perm: Adm
   { href: "/admin", label: "Overview", perm: "admin.dashboard", exact: true },
   { href: "/admin/companies", label: "Companies", perm: "companies.view" },
   { href: "/admin/users", label: "Users", perm: "users.view" },
+  { href: "/admin/messages", label: "Messages", perm: "messages.view" },
+  { href: "/admin/website", label: "Website", perm: "website.manage" },
   { href: "/admin/plugins", label: "Plugins", perm: "plugins.manage" },
   { href: "/admin/audit", label: "Audit", perm: "audit.view" },
   { href: "/admin/system", label: "System", perm: "system.view" },

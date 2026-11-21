@@ -52,7 +52,7 @@ export function WebhookTools({ companyId, deadCount }: { companyId: string; dead
     <div className="flex flex-col gap-3 border-t border-border pt-4">
       <div>
         <div className="text-[13px] font-medium">Signing secret</div>
-        <p className="text-xs text-muted">Paste this into Lead Manager so it can verify that events really come from MyGST.</p>
+        <p className="text-xs text-muted">Paste this into Lead Manager so it can verify that events really come from MyGSTBook.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {secret ? (

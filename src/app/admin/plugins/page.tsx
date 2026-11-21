@@ -124,7 +124,7 @@ export default async function AdminPluginsPage() {
             <CardHeader
               className="mb-3 p-0"
               title="Upload a plugin"
-              description="A plugin packed with npm run plugin:pack. It's stored in the database, so redeploys keep it. Uploaded code is trusted: it runs inside MyGST."
+              description="A plugin packed with npm run plugin:pack. It's stored in the database, so redeploys keep it. Uploaded code is trusted: it runs inside MyGSTBook."
             />
             <UploadPluginForm permissionLabels={PLUGIN_PERMISSIONS} />
           </Card>
@@ -133,7 +133,7 @@ export default async function AdminPluginsPage() {
         <CardHeader
           className="mb-3 p-0"
           title="Add an external plugin"
-          description="External plugins run on their own server. They receive signed events, call the MyGST API with a key scoped to their permissions, and show pages inside MyGST in a frame."
+          description="External plugins run on their own server. They receive signed events, call the MyGSTBook API with a key scoped to their permissions, and show pages inside MyGST in a frame."
         />
         <AddExternalForm />
       </Card>

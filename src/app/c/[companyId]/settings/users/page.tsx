@@ -1,3 +1,4 @@
+import { formatMobile } from "@/lib/phone";
 import { Card, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
 import { BUILTIN_ROLE_ID, roleNames } from "@/lib/permissions";
@@ -13,7 +14,7 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
   const [members, invites] = await Promise.all([
     db.membership.findMany({
       where: { companyId: ctx.companyId },
-      include: { user: { select: { name: true, email: true } }, roles: { select: { roleId: true } } },
+      include: { user: { select: { name: true, email: true, phone: true } }, roles: { select: { roleId: true } } },
       orderBy: { createdAt: "asc" },
     }),
     db.invitation.findMany({ where: { companyId: ctx.companyId, acceptedAt: null }, orderBy: { createdAt: "desc" } }),
@@ -39,6 +40,7 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
             <tr>
               <Th>Name</Th>
               <Th>Email</Th>
+              <Th>Mobile</Th>
               <Th>Roles</Th>
               <Th />
             </tr>
@@ -51,6 +53,15 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
                   {m.userId === ctx.user.id && <span className="text-muted"> (you)</span>}
                 </Td>
                 <Td>{m.user.email}</Td>
+                <Td className="whitespace-nowrap">
+                  {m.user.phone ? (
+                    <a href={`tel:${m.user.phone}`} className="hover:text-primary">
+                      {formatMobile(m.user.phone)}
+                    </a>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </Td>
                 <Td colSpan={2}>
                   <MemberActions companyId={ctx.companyId} membershipId={m.id} roles={roles} current={m.roles.map((r) => r.roleId)} name={m.user.name} />
                 </Td>
@@ -60,6 +71,7 @@ export default async function UsersPage({ params }: PageProps<"/c/[companyId]/se
               <tr key={i.id} className="text-muted">
                 <Td>Pending invite</Td>
                 <Td>{i.email}</Td>
+                <Td>—</Td>
                 <Td>
                   {roleNames(inviteRoles(i.roleIds))}
                   {i.expiresAt < new Date() && " · expired"}

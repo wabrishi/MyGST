@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
 import { escapeHtml, sendMail } from "./mail";
+import { MOBILE_ERROR, normalizeMobile } from "./phone";
 
 /** Session cookie prefix — suite apps on one host (localhost shares cookies across ports) must not clash. */
 export const COOKIE_PREFIX = "gst";
@@ -30,9 +31,21 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
   },
+  // Mobile number, asked at sign-up (see databaseHooks.user.create below).
+  user: { additionalFields: { phone: { type: "string", required: false, defaultValue: "", input: true } } },
   rateLimit: { enabled: true, window: 60, max: 30 },
   advanced: { cookiePrefix: COOKIE_PREFIX },
   databaseHooks: {
+    user: {
+      create: {
+        // Every new account needs a valid mobile number; it's stored normalised ("+91XXXXXXXXXX").
+        before: async (user) => {
+          const phone = normalizeMobile((user as { phone?: unknown }).phone);
+          if (!phone) throw new APIError("BAD_REQUEST", { message: MOBILE_ERROR, code: "INVALID_PHONE" });
+          return { data: { ...user, phone } };
+        },
+      },
+    },
     session: {
       create: {
         // Accounts disabled by a platform admin can't sign in (existing sessions are deleted on disable).

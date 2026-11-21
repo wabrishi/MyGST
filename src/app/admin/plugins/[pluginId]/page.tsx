@@ -174,8 +174,8 @@ export default async function AdminPluginPage({ params, searchParams }: PageProp
               <h2 className="mb-1 font-semibold">Download</h2>
               <p className="mb-3 text-xs text-muted">
                 {plugin.kind === "EXTERNAL"
-                  ? "The plugin's manifest.json. Load it on another MyGST by URL."
-                  : "The packed plugin file. Upload it on another MyGST under Admin → Plugins → Upload a plugin."}{" "}
+                  ? "The plugin's manifest.json. Load it on another MyGSTBook by URL."
+                  : "The packed plugin file. Upload it on another MyGSTBook under Admin → Plugins → Upload a plugin."}{" "}
                 Only super admins see this.
               </p>
               <a href={`/admin/plugins/${plugin.id}/download`} download className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 font-medium hover:bg-surface-2">

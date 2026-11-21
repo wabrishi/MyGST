@@ -6,6 +6,7 @@ import { Alert, Card, CardHeader, PageHeader, StatCard } from "@/components/ui";
 import { ADMIN_PAGES } from "@/lib/admin-permissions";
 import { adminCan, requireAdmin } from "@/lib/admin";
 import { platformOverview } from "@/lib/admin-stats";
+import { db } from "@/lib/db";
 import { formatINR } from "@/lib/gst/calc";
 import { ColumnTrend } from "./admin-charts";
 
@@ -24,6 +25,7 @@ export default async function AdminOverviewPage() {
   const fy = `FY ${s.fyStart.slice(2, 4)}-${String(Number(s.fyStart.slice(2, 4)) + 1).padStart(2, "0")}`;
   const maxTop = Math.max(1, ...s.topCompanies.map((c) => c.value));
   const showSystem = adminCan(admin, "system.view");
+  const unreadMessages = adminCan(admin, "messages.view") ? await db.contactMessage.count({ where: { readAt: null } }).catch(() => 0) : 0;
 
   return (
     <>
@@ -39,6 +41,17 @@ export default async function AdminOverviewPage() {
                 Open system health
               </Link>
             </span>
+          </Alert>
+        </div>
+      )}
+
+      {unreadMessages > 0 && (
+        <div className="mb-5">
+          <Alert kind="info">
+            {n.format(unreadMessages)} unread website {unreadMessages === 1 ? "message" : "messages"}.{" "}
+            <Link href="/admin/messages?filter=unread" className="font-semibold underline underline-offset-2">
+              Read {unreadMessages === 1 ? "it" : "them"}
+            </Link>
           </Alert>
         </div>
       )}

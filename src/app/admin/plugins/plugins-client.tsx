@@ -288,7 +288,7 @@ export function UploadPluginForm({ permissionLabels }: { permissionLabels: Recor
             )}
           </div>
           <Alert kind="warning">
-            This code runs inside MyGST with full access to the server and every company&apos;s data. The permissions above only limit what it asks
+            This code runs inside MyGSTBook with full access to the server and every company&apos;s data. The permissions above only limit what it asks
             for through the SDK. Upload only plugins you wrote or trust, and check the checksum matches what the author published.
           </Alert>
           {preview.downgrade && (

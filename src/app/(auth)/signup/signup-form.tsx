@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { Alert, Button, Field, Input } from "@/components/ui";
 import { authClient } from "@/lib/auth-client";
+import { MOBILE_ERROR, normalizeMobile } from "@/lib/phone";
 import { safeNext } from "../safe-next";
 
 function SignupForm() {
@@ -17,12 +18,15 @@ function SignupForm() {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const password = String(form.get("password"));
+    const phone = normalizeMobile(String(form.get("phone") ?? ""));
+    if (!phone) return setError(MOBILE_ERROR);
     if (password !== String(form.get("confirm"))) return setError("Passwords do not match");
     setPending(true);
     setError("");
     const { error } = await authClient.signUp.email({
       name: String(form.get("name")).trim(),
       email: String(form.get("email")).trim(),
+      phone,
       password,
     });
     setPending(false);
@@ -43,6 +47,9 @@ function SignupForm() {
       </Field>
       <Field label="Email">
         <Input name="email" type="email" autoComplete="email" required />
+      </Field>
+      <Field label="Mobile number" hint="10-digit mobile, e.g. 98765 43210">
+        <Input name="phone" type="tel" inputMode="tel" autoComplete="tel" required maxLength={20} placeholder="+91" />
       </Field>
       <Field label="Password" hint="At least 8 characters">
         <Input name="password" type="password" autoComplete="new-password" required minLength={8} />

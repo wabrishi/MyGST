@@ -7,6 +7,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { isBreakGlassAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { roleNames } from "@/lib/permissions";
+import { formatMobile } from "@/lib/phone";
 
 export const metadata = { title: "Users" };
 
@@ -29,7 +30,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
   const breakGlass = (process.env.SUPER_ADMIN_EMAILS ?? "").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
 
   const where: Prisma.UserWhereInput = {
-    ...(q && { OR: [{ name: { contains: q } }, { email: { contains: q } }, { memberships: { some: { company: { legalName: { contains: q } } } } }] }),
+    ...(q && { OR: [{ name: { contains: q } }, { email: { contains: q } }, { phone: { contains: q.replace(/\D/g, "") || q } }, { memberships: { some: { company: { legalName: { contains: q } } } } }] }),
     ...(filter === "active" && { disabledAt: null }),
     ...(filter === "disabled" && { disabledAt: { not: null } }),
     ...(filter === "admins" && { OR: [{ platformRoles: { some: {} } }, { email: { in: breakGlass } }] }),
@@ -46,6 +47,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
         id: true,
         name: true,
         email: true,
+        phone: true,
         createdAt: true,
         disabledAt: true,
         memberships: { select: { company: { select: { id: true, legalName: true, tradeName: true } }, roles: { select: { role: { select: { name: true } } } } } },
@@ -92,7 +94,10 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/admin
                       <Link href={`/admin/users/${u.id}`} className="font-medium text-primary hover:underline">
                         {u.name}
                       </Link>
-                      <div className="text-xs text-muted">{u.email}</div>
+                      <div className="text-xs text-muted">
+                        {u.email}
+                        {u.phone && ` · ${formatMobile(u.phone)}`}
+                      </div>
                     </Td>
                     <Td className="text-xs">
                       {m ? (

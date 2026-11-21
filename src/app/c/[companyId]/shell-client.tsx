@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, Sparkles, X } from "lucide-react";
+import { ChevronRight, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, Sparkles, UserRound, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -191,6 +191,9 @@ export function UserMenu({
             <Badge color="blue">{roleLabel}</Badge>
           </div>
           <div className="my-1 h-px bg-border" />
+          <Link role="menuitem" href="/account" className={item} onClick={() => setOpen(false)}>
+            <UserRound size={15} className="text-muted" /> My profile
+          </Link>
           {isOwner && (
             <>
               <Link role="menuitem" href={`/c/${companyId}/settings/company`} className={item} onClick={() => setOpen(false)}>

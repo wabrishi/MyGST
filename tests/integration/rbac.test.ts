@@ -105,7 +105,7 @@ describe("rbac & admin console", () => {
   it("disabling a user blocks new sessions", async () => {
     const { auth } = await import("@/lib/auth");
     const email = `rbac-login-${stamp}@test.local`;
-    const created = await auth.api.signUpEmail({ body: { name: "Login Test", email, password: "Passw0rd!123" } });
+    const created = await auth.api.signUpEmail({ body: { name: "Login Test", email, phone: "98765 43210", password: "Passw0rd!123" } });
     users.push(created.user.id);
     await auth.api.signInEmail({ body: { email, password: "Passw0rd!123" } }); // works while enabled
     await db.user.update({ where: { id: created.user.id }, data: { disabledAt: new Date() } });

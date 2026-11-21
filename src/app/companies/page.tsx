@@ -24,7 +24,12 @@ export default async function CompaniesPage({ searchParams }: PageProps<"/compan
 
   return (
     <CenteredShell>
-      <h1 className="mb-6 text-2xl font-semibold tracking-tight">Your company</h1>
+      <div className="mb-6 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Your company</h1>
+        <Link href="/account" className="text-sm font-medium text-primary hover:underline">
+          My profile
+        </Link>
+      </div>
       {sp.suspended && (
         <div className="mb-4">
           <Alert kind="warning">That company is suspended. Contact support to reactivate it.</Alert>

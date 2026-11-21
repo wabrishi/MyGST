@@ -15,6 +15,8 @@ model User {
   email         String    @unique
   emailVerified Boolean   @default(false)
   image         String?   @db.Text
+  /// Mobile number, normalised by src/lib/phone.ts ("+91XXXXXXXXXX"); asked at sign-up.
+  phone         String    @default("") @db.VarChar(20)
   /// Disabled by a platform admin: can't sign in, sessions are dropped.
   disabledAt    DateTime?
   createdAt     DateTime  @default(now())
@@ -938,4 +940,23 @@ model PluginLog {
   @@index([pluginId, createdAt])
   @@index([createdAt])
   @@map("plugin_log")
+}
+
+/// Messages sent from the public website's Contact page (read in Admin → Messages).
+model ContactMessage {
+  id        String    @id @default(cuid())
+  name      String    @db.VarChar(120)
+  email     String    @db.VarChar(160)
+  phone     String    @default("") @db.VarChar(30)
+  company   String    @default("") @db.VarChar(160)
+  topic     String    @db.VarChar(20)
+  message   String    @db.Text
+  ip        String    @default("") @db.VarChar(64)
+  userAgent String    @default("") @db.VarChar(300)
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([ip, createdAt])
+  @@map("contact_message")
 }

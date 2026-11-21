@@ -64,7 +64,7 @@ export async function BackupPanel({
               Connect Google Drive
             </ButtonLink>
             <p className="text-xs text-muted">
-              MyGST asks only for access to files it creates (it can&apos;t see the rest of your Drive). Backups go into a “MyGST Backups” folder
+              MyGSTBook asks only for access to files it creates (it can&apos;t see the rest of your Drive). Backups go into a “MyGST Backups” folder
               and are kept for 30 days.
             </p>
           </div>

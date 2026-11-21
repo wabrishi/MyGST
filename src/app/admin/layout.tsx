@@ -5,7 +5,7 @@ import { Avatar, Badge } from "@/components/ui";
 import { requireAdmin } from "@/lib/admin";
 import { AdminNav } from "./admin-nav";
 
-export const metadata = { title: { default: "Admin", template: "%s · MyGST Admin" } };
+export const metadata = { title: { default: "Admin", template: "%s · MyGSTBook Admin" } };
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const admin = await requireAdmin();
@@ -24,6 +24,9 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
           <div className="ml-auto flex items-center gap-3 text-[13px]">
             <Link href="/companies" className="hidden text-muted hover:text-foreground sm:inline">
               My company
+            </Link>
+            <Link href="/account" className="hidden text-muted hover:text-foreground sm:inline">
+              My profile
             </Link>
             <span className="hidden text-muted md:inline">{admin.user.email}</span>
             <Avatar name={admin.user.name} size={30} />

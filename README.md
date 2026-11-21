@@ -1,4 +1,4 @@
-# MyGST — GST billing for Indian businesses
+# MyGSTBook — GST billing for Indian businesses
 
 Multi-company, multi-user GST billing SaaS: tax invoices, quotations, credit/debit notes, purchases with ITC, payments & outstanding, GSTR-1 / GSTR-3B reports and financial-year management.
 
@@ -10,6 +10,8 @@ Multi-company, multi-user GST billing SaaS: tax invoices, quotations, credit/deb
 |---|---|
 | Companies & users | Sign up and create your company, invite users by email. **Roles (RBAC):** built-in **Owner / Accountant / Staff** plus custom roles built from individual permissions (*Settings → Roles*); a user can hold **several roles** and gets all their permissions. **Each user belongs to exactly one company**, enforced by a unique index on `membership.userId` |
 | Admin console | `/admin` for platform operators: **overview** (KPIs and charts across all companies), **companies** (create, invite owner, track setup, suspend), **users** (disable, sign out, reset password, set a temporary password), **audit log**, **system health** (event delivery, backups, plugin errors, cron, migrations), **plugins**, **menu** (drag and drop to set the order of sidebar sections and items for every company) and **admin roles**. Admins see counts only, never a company's books |
+| Public website | Home, **Features**, **Pricing** (plans and prices in `src/lib/site.ts`, monthly/yearly switch), **About** and **Contact**. Contact messages (name, email, **mobile required**) are saved in **Admin → Messages** and emailed, with spam protection (hidden field, minimum fill time, 5 per IP per hour). The super admin sets the website's **mobile number**, WhatsApp, email, address and where messages go in **Admin → Website**; the mobile shows on the Contact page, header and footer. Sitemap and robots included |
+| Mobile numbers | Sign-up asks for a **mobile number** (Indian 10-digit, or +country code), stored as `+91…`. Users edit it in **My profile** (`/account`, from the account menu); owners see members' numbers in Settings → Users, admins in Admin → Users |
 | Sidebar | Sections (Sales, Purchases, Masters, Insights and plugin sections) **expand and collapse**; each user's choice is remembered in their browser, and the section of the open page always shows. The order is set by the super admin in Admin → Menu |
 | Setup wizard | `/c/<id>/setup`: Business & GST → Bank & invoice → Numbering & year → Team → First records. New owners land here; the dashboard shows progress until finished |
 | Masters | Customers & suppliers (GSTIN checksum validation, state auto-filled), products/services with HSN/SAC, unit, GST rate |
@@ -82,6 +84,7 @@ Hostinger's managed hosting provides **MySQL/MariaDB** and **Node.js app hosting
    - `BETTER_AUTH_SECRET`: a long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
    - `BETTER_AUTH_URL` and `APP_URL`: your public `https://` URL, exactly as users open it. Login is rejected from other origins.
    - `SMTP_HOST=smtp.hostinger.com`, `SMTP_PORT=465`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`: a mailbox created under *Emails*.
+   - Website contact details (mobile, WhatsApp, email, address, where messages go): set them in **Admin → Website**. `CONTACT_EMAIL`, `CONTACT_PHONE`, `CONTACT_ADDRESS`, `CONTACT_WHATSAPP` and `CONTACT_NOTIFY_EMAIL` still work as defaults.
    - `SUPER_ADMIN_EMAILS`: comma-separated emails that are always full super admins (break-glass: they can't be locked out). Sign up with one of these emails, then give other staff limited access with **Admin → Users → Admin roles** (Super admin, Support, Viewer or your own roles).
 5. **Point your domain and enable SSL** (free SSL in hPanel), then deploy. Each push to the branch redeploys, and pending migrations run automatically when the app starts.
 6. **Backups:** enable Hostinger's daily backups. Company owners can also download a full JSON export under *Settings → Company → Export all data*.

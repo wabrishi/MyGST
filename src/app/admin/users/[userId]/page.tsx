@@ -4,6 +4,7 @@ import { Alert, Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/com
 import { adminCan, isBreakGlassAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { roleNames } from "@/lib/permissions";
+import { formatMobile } from "@/lib/phone";
 import { AccountActions, PlatformRolesForm, TempPasswordForm } from "./user-client";
 
 export const metadata = { title: "User" };
@@ -19,6 +20,7 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
       id: true,
       name: true,
       email: true,
+      phone: true,
       createdAt: true,
       disabledAt: true,
       accounts: { select: { providerId: true } },
@@ -52,7 +54,16 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
         subtitle={
           <span className="flex flex-wrap items-center gap-2">
             {u.disabledAt ? <Badge color="red">Disabled {u.disabledAt.toISOString().slice(0, 10)}</Badge> : <Badge color="green">Active</Badge>}
-            {u.email} · joined {u.createdAt.toISOString().slice(0, 10)} · sign-in: {signIn}
+            {u.email}
+            {u.phone && (
+              <>
+                {" · "}
+                <a href={`tel:${u.phone}`} className="hover:text-primary">
+                  {formatMobile(u.phone)}
+                </a>
+              </>
+            )}{" "}
+            · joined {u.createdAt.toISOString().slice(0, 10)} · sign-in: {signIn}
           </span>
         }
       />

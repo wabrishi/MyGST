@@ -47,7 +47,7 @@ function LoginForm() {
       </Link>
       <Button size="lg" disabled={pending}>{pending ? "Signing in…" : "Sign in"}</Button>
       <p className="text-center text-sm text-muted">
-        New to MyGST?{" "}
+        New to MyGSTBook?{" "}
         <Link href={`/signup${params.get("next") ? `?next=${encodeURIComponent(params.get("next")!)}` : ""}`} className="font-medium text-primary hover:underline">
           Create an account
         </Link>

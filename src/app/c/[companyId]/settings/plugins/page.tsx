@@ -20,7 +20,7 @@ export default async function CompanyPluginsPage({ params }: PageProps<"/c/[comp
     return (
       <Card>
         <Empty icon={Puzzle} title="No plugins available">
-          Plugins add features to MyGST, such as notifications, extra fields and integrations. Your platform administrator decides which plugins are available.
+          Plugins add features to MyGSTBook, such as notifications, extra fields and integrations. Your platform administrator decides which plugins are available.
         </Empty>
       </Card>
     );
@@ -73,7 +73,7 @@ export default async function CompanyPluginsPage({ params }: PageProps<"/c/[comp
                 {e.plugin.kind === "EXTERNAL" && e.active && (
                   <div className="rounded-lg border border-border bg-surface-2 p-4 text-[13px] text-muted">
                     <p className="mb-2">
-                      This plugin runs on its own server. It received an API key limited to the permissions above and a secret to verify MyGST&apos;s events. If it
+                      This plugin runs on its own server. It received an API key limited to the permissions above and a secret to verify MyGSTBook&apos;s events. If it
                       lost them, reconnect to issue new ones (the old key stops working).
                     </p>
                     <ReconnectButton companyId={ctx.companyId} pluginId={e.plugin.id} />
