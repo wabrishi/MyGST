@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * The plugin manifest — one shape for code plugins (src/plugins/<id>/index.ts) and external plugins
  * (manifest.json served over https). Pure module: no database, unit-tested directly.
- * Reference: docs/plugins/README.md#manifest
+ * Reference: docs/plugins/README.md#manifest-reference
  */
 
 export const PLUGIN_PERMISSIONS = {

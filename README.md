@@ -172,7 +172,7 @@ Super admins can **download** any plugin from Admin → Plugins (built-in and up
 
 When installing, the super admin chooses whether the plugin starts **on by default** and who it's **available to**: all companies (with per-company blocks), selected companies, or nobody (kill switch). Owners turn available plugins on or off and configure them in **Settings → Plugins**.
 
-Building one: see the **[plugin developer guide](docs/plugins/README.md)**, or start with `npm run plugin:new -- my-plugin "My plugin"`. The examples are `invoice-footer`, `slack-notify`, `po-number` and `examples/external-plugin`; **`lead-manager`** (leads, pipeline, follow-ups, convert to customer and quotation, morning email) is the reference for a big plugin.
+Building one: the **[plugin developer guide](docs/plugins/README.md)** walks you through a complete plugin step by step (a stock tracker: data, events, pages, forms, permissions, a daily job, tests, packing and upload) and has recipes and a full reference. Or start with `npm run plugin:new -- my-plugin "My plugin"`. The examples are `invoice-footer`, `slack-notify`, `po-number` and `examples/external-plugin`; **`lead-manager`** (leads, pipeline, follow-ups, convert to customer and quotation, morning email) is the reference for a big plugin.
 
 ## GST notes & limitations (v1)
 
