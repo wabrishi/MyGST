@@ -7,6 +7,7 @@ import { db, runTx, type Tx } from "./db";
 import { NOTE_REASONS, isNote, kindOfType, salesType } from "./doc-kinds";
 import { eventItems } from "./events/items";
 import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
+import { acceptShare, notifyShareReceived, syncDocumentShare } from "./sharing";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { financialYear, todayIST } from "./gst/fy";
 import { isStateCode } from "./gst/states";
@@ -45,6 +46,8 @@ export const docInputSchema = z.object({
   originalDocId: z.string().default(""),
   noteReason: z.string().default(""),
   sourceQuotationId: z.string().default(""),
+  /** Created from a purchase order another company sent us (the share it came from). */
+  receivedId: z.string().max(40).optional().default(""),
   items: z.array(lineSchema).min(1, "Add at least one item").max(200),
 });
 
@@ -109,6 +112,7 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
   // Plugin filters run before the transaction (they may call out over HTTP; no row locks held).
   const plugin = await runDocumentFilters(ctx, type, id, input);
 
+  let newShare: string | null = null;
   const savedId = await runTx(async (tx) => {
     const company = await tx.company.findUniqueOrThrow({ where: { id: companyId } });
     if (!company.stateCode) throw new UserError("Finish company setup (state and address) before creating documents.");
@@ -302,9 +306,13 @@ export async function saveDocument(ctx: CompanyContext, type: DocType, id: strin
     await tx.auditLog.create({
       data: { companyId, userId: ctx.user.id, action: id ? "update" : "create", entity: type.toLowerCase(), entityId: docId },
     });
+    // Customer on MyGSTBook (same GSTIN)? It arrives in their Received inbox.
+    newShare = await syncDocumentShare(tx, companyId, docId);
+    if (!id && (type === "INVOICE" || type === "QUOTATION")) await acceptShare(tx, companyId, input.receivedId, "PURCHASE_ORDER", docId, ctx.user.id);
     return docId;
   });
   await deliverSoon(companyId);
+  await notifyShareReceived(newShare);
   return savedId;
 }
 
@@ -361,6 +369,7 @@ export async function cancelDocument(ctx: CompanyContext, id: string) {
       throw new UserError("Cancel the credit/debit notes issued against this invoice first");
     }
     await tx.document.update({ where: { id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    await syncDocumentShare(tx, ctx.companyId, id); // withdraws it from the customer's inbox
     // Re-open the quotation this invoice came from.
     await tx.document.updateMany({ where: { convertedToId: id, companyId: ctx.companyId }, data: { status: "OPEN", convertedToId: null } });
     await tx.auditLog.create({ data: { companyId: ctx.companyId, userId: ctx.user.id, action: "cancel", entity: doc.type.toLowerCase(), entityId: id } });

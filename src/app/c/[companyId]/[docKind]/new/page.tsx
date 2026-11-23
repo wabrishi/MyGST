@@ -5,6 +5,7 @@ import { DOC_KINDS, isDocKind } from "@/lib/doc-kinds";
 import { loadDocument } from "@/lib/documents";
 import { todayIST } from "@/lib/gst/fy";
 import { peekNumber } from "@/lib/numbering";
+import { loadReceived, prefillLines } from "@/lib/sharing";
 import { requireCompanyPage } from "@/lib/tenant";
 import { DocForm, type DocFormInitial } from "../doc-form";
 import { loadFormMasters } from "../form-data";
@@ -58,6 +59,27 @@ export default async function NewDocPage({ params, searchParams }: PageProps<"/c
         initial = { ...base, originalDocId: src.id, noteReason: docKind === "credit-notes" ? "Sales Return" : "" };
         banner = `Against invoice ${src.number}. Adjust items/quantities to the amount being ${docKind === "credit-notes" ? "credited" : "debited"}.`;
       }
+    }
+  }
+
+  // ?received=<id>: an invoice or quotation for a purchase order a customer on MyGSTBook sent us.
+  const receivedId = typeof sp.received === "string" ? sp.received : "";
+  if (receivedId && (docKind === "invoices" || docKind === "quotations")) {
+    const share = await loadReceived(ctx.companyId, receivedId);
+    if (share?.kind === "PURCHASE_ORDER" && share.status !== "ACCEPTED" && share.status !== "WITHDRAWN") {
+      const s = share.snapshot;
+      const customer = await db.party.findFirst({ where: { companyId: ctx.companyId, gstin: s.from.gstin }, orderBy: { createdAt: "asc" }, select: { id: true } });
+      initial = {
+        ...initial,
+        partyId: customer?.id ?? "",
+        placeOfSupply: s.placeOfSupply,
+        pricesIncludeTax: s.pricesIncludeTax,
+        shippingAddress: s.deliveryAddress.slice(0, 500),
+        notes: `Against your purchase order ${s.number}`,
+        items: prefillLines(s),
+        receivedId: share.id,
+      };
+      banner = `${cfg.singular} for purchase order ${s.number} from ${s.from.name}, received on MyGSTBook. Check prices and items, then save.`;
     }
   }
 

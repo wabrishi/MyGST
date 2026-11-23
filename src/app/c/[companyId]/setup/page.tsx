@@ -43,6 +43,7 @@ export default async function SetupPage({ params, searchParams }: PageProps<"/c/
     upiId: c.upiId,
     terms: c.terms ?? "",
     pricesIncludeTax: c.pricesIncludeTax,
+            inviteParties: c.inviteParties,
   };
 
   let body: React.ReactNode;

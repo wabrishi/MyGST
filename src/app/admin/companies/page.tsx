@@ -6,6 +6,7 @@ import { Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th 
 import type { Prisma } from "@/generated/prisma/client";
 import { adminCan, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { duplicateGstins } from "@/lib/network";
 import { BUILTIN_ROLE_ID } from "@/lib/permissions";
 import { stateName } from "@/lib/gst/states";
 
@@ -32,6 +33,7 @@ export default async function AdminCompaniesPage({ searchParams }: PageProps<"/a
     ...(filter === "suspended" && { suspendedAt: { not: null } }),
   };
 
+  const dupes = await duplicateGstins().catch(() => new Set<string>());
   const [rows, total, suspended, pending] = await Promise.all([
     db.company.findMany({
       where,
@@ -94,7 +96,14 @@ export default async function AdminCompaniesPage({ searchParams }: PageProps<"/a
                     </Link>
                     <div className="text-xs text-muted">{stateName(c.stateCode)}</div>
                   </Td>
-                  <Td className="font-mono text-xs">{c.gstin || "—"}</Td>
+                  <Td className="font-mono text-xs">
+                    {c.gstin || "—"}
+                    {c.gstin && dupes.has(c.gstin) && (
+                      <span className="mt-1 block font-sans" title="Another company uses this GSTIN, so documents aren't shared with either until it's resolved">
+                        <Badge color="amber">Duplicate GSTIN</Badge>
+                      </span>
+                    )}
+                  </Td>
                   <Td className="text-xs">
                     {c.memberships.map((m) => m.user.email).join(", ") ||
                       (c.invitations.length ? <span className="text-muted">Invited: {c.invitations.map((i) => i.email).join(", ")}</span> : <span className="text-danger">No owner</span>)}

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { todayIST } from "@/lib/gst/fy";
 import { can } from "@/lib/permissions";
 import { loadPurchaseOrder } from "@/lib/purchase-orders";
+import { loadReceived, prefillLines } from "@/lib/sharing";
 import { requireCompanyPage } from "@/lib/tenant";
 import { loadPurchaseMasters } from "../masters";
 import { PurchaseForm, type PurchaseFormInitial } from "../purchase-form";
@@ -59,6 +60,27 @@ export default async function NewPurchasePage({ params, searchParams }: PageProp
           discountPct: i.discountPct,
           gstRate: i.gstRate,
         })),
+      };
+    }
+  }
+
+  // ?received=<id>: an invoice a supplier on MyGSTBook sent us (supplier created by "Add to purchases").
+  const receivedId = typeof sp.received === "string" ? sp.received : "";
+  if (receivedId) {
+    const share = await loadReceived(ctx.companyId, receivedId);
+    if (share?.kind === "INVOICE" && share.status !== "ACCEPTED" && share.status !== "WITHDRAWN") {
+      const s = share.snapshot;
+      const supplier = await db.party.findFirst({ where: { companyId: ctx.companyId, gstin: s.from.gstin }, orderBy: { createdAt: "asc" }, select: { id: true } });
+      initial = {
+        ...initial,
+        partyId: supplier?.id ?? "",
+        billNumber: s.number.slice(0, 30),
+        billDate: s.date,
+        dueDate: s.dueDate,
+        placeOfSupply: s.placeOfSupply,
+        pricesIncludeTax: s.pricesIncludeTax,
+        items: prefillLines(s),
+        received: { id: share.id, from: s.from.name, number: s.number },
       };
     }
   }

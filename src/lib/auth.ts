@@ -7,7 +7,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
-import { escapeHtml, sendMail } from "./mail";
+import { sendTemplate } from "./email-render";
 import { MOBILE_ERROR, normalizeMobile } from "./phone";
 
 /** Session cookie prefix — suite apps on one host (localhost shares cookies across ports) must not clash. */
@@ -20,11 +20,7 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      await sendMail({
-        to: user.email,
-        subject: "Reset your MyGST password",
-        html: `<p>Hi ${escapeHtml(user.name)},</p><p>Click the link below to reset your password. It expires in 1 hour.</p><p><a href="${escapeHtml(url)}">Reset password</a></p><p>If you didn't request this, ignore this email.</p>`,
-      });
+      await sendTemplate("password_reset", user.email, { name: user.name, url });
     },
   },
   session: {
@@ -43,6 +39,11 @@ export const auth = betterAuth({
           const phone = normalizeMobile((user as { phone?: unknown }).phone);
           if (!phone) throw new APIError("BAD_REQUEST", { message: MOBILE_ERROR, code: "INVALID_PHONE" });
           return { data: { ...user, phone } };
+        },
+        // Someone invited as a party has now joined.
+        after: async (user) => {
+          const { markInviteJoined } = await import("./party-invites");
+          await markInviteJoined(user.email);
         },
       },
     },

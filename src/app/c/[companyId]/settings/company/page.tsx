@@ -48,6 +48,7 @@ export default async function CompanySettingsPage({ params }: PageProps<"/c/[com
             upiId: c.upiId,
             terms: c.terms ?? "",
             pricesIncludeTax: c.pricesIncludeTax,
+            inviteParties: c.inviteParties,
           }}
         />
       </Card>

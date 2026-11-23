@@ -13,11 +13,14 @@ export function PartyForm({
   id,
   initial,
   canDelete,
+  invite,
 }: {
   companyId: string;
   id: string | null;
   initial?: Partial<PartyInput>;
   canDelete?: boolean;
+  /** "Invite to MyGSTBook": ticked by default, or a note when they're already on MyGSTBook / invited. */
+  invite?: { defaultChecked: boolean; note: string | null };
 }) {
   const { execute, pending, error, fieldErrors: fe } = useAction(saveParty.bind(null, companyId, id));
   const del = useAction(deleteParty.bind(null, companyId, id ?? ""));
@@ -64,9 +67,23 @@ export function PartyForm({
       <Field label="Phone" error={fe.phone}>
         <Input name="phone" defaultValue={initial?.phone} />
       </Field>
-      <Field label="Email" error={fe.email}>
-        <Input name="email" type="email" defaultValue={initial?.email} />
-      </Field>
+      <div className="flex flex-col gap-1.5">
+        <Field label="Email" error={fe.email}>
+          <Input name="email" type="email" defaultValue={initial?.email} />
+        </Field>
+        {invite &&
+          (invite.note ? (
+            <span className="text-xs text-success">{invite.note}</span>
+          ) : (
+            <label className="flex items-start gap-2 text-xs text-muted">
+              <input type="checkbox" name="invite" defaultChecked={invite.defaultChecked} className="mt-0.5" />
+              <span>
+                <span className="font-medium text-foreground">Invite to MyGSTBook</span>: we&apos;ll send them a free invitation (only once), so they can
+                receive your invoices straight into their books.
+              </span>
+            </label>
+          ))}
+      </div>
       <Field label="Billing address" error={fe.billingAddress}>
         <Textarea name="billingAddress" defaultValue={initial?.billingAddress} rows={3} maxLength={500} />
       </Field>

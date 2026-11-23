@@ -34,6 +34,8 @@ export interface DocFormInitial {
   noteReason: string;
   sourceQuotationId: string;
   items: LineValues[];
+  /** Created from a purchase order a customer on MyGSTBook sent us. */
+  receivedId?: string;
 }
 
 const addDays = (iso: string, days: number) => {
@@ -115,6 +117,7 @@ export function DocForm({
       originalDocId,
       noteReason,
       sourceQuotationId: initial.sourceQuotationId,
+      receivedId: initial.receivedId ?? "",
       items: linesForSubmit(lines),
     });
   }

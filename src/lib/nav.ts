@@ -10,6 +10,7 @@ import {
   FileMinus,
   FilePlus,
   FileText,
+  Inbox,
   LayoutDashboard,
   Mail,
   MessageSquare,
@@ -57,7 +58,11 @@ export const CORE_SECTIONS: NavSectionDef[] = [
   {
     key: "purchases",
     title: "Purchases",
-    items: [item("purchase-orders", "Purchase orders", ClipboardList, "purchaseOrders.view"), item("purchases", "Purchase invoices", ShoppingCart, "purchases.view")],
+    items: [
+      item("purchase-orders", "Purchase orders", ClipboardList, "purchaseOrders.view"),
+      item("purchases", "Purchase invoices", ShoppingCart, "purchases.view"),
+      item("received", "Received", Inbox, ["purchases.view", "purchaseOrders.view", "docs.create"]),
+    ],
   },
   { key: "masters", title: "Masters", items: [item("parties", "Parties", Users), item("products", "Products", Package)] },
   { key: "insights", title: "Insights", items: [item("reports", "Reports", BarChart3, "reports.view"), item("settings", "Settings", Settings, SETTINGS_PERMISSIONS)] },

@@ -7,7 +7,8 @@ import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { formatPaise } from "@/lib/gst/calc";
-import { escapeHtml, mailEnabled, sendMail } from "@/lib/mail";
+import { sendTemplate } from "@/lib/email-render";
+import { mailEnabled } from "@/lib/mail";
 import { purchaseOrderPdfFor } from "@/lib/pdf/purchase-order-pdf";
 import {
   cancelPurchaseOrder,
@@ -53,14 +54,12 @@ export async function emailPO(companyId: string, id: string, to: string): Promis
     const company = await db.company.findUniqueOrThrow({ where: { id: ctx.companyId } });
     const pdf = await purchaseOrderPdfFor(po, company);
     const from = company.tradeName || company.legalName;
-    await sendMail({
-      to: email,
-      subject: `Purchase Order ${po.number} from ${from}`,
-      html: `<p>Dear ${escapeHtml(po.partyName)},</p><p>Please find attached our purchase order <b>${escapeHtml(po.number)}</b> dated ${po.date} for <b>₹${formatPaise(po.grandTotal)}</b>${
-        po.expectedDate ? `, to be delivered by <b>${po.expectedDate}</b>` : ""
-      }.</p><p>Please quote the PO number on your invoice.</p><p>Regards,<br>${escapeHtml(from)}</p>`,
-      attachments: [{ filename: `${po.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }],
-    });
+    await sendTemplate(
+      "po_email",
+      email,
+      { partyName: po.partyName, number: po.number, date: po.date, total: `₹${formatPaise(po.grandTotal)}`, expectedDate: po.expectedDate || "", companyName: from },
+      { attachments: [{ filename: `${po.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }] },
+    );
     await audit(ctx, "email", "purchase_order", id, { to: email });
     return ok(undefined, mailEnabled() ? `Sent to ${email}` : "Email not configured — logged to server console");
   });

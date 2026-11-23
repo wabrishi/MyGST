@@ -60,7 +60,7 @@ export async function addParty(
   if (p.state) await page.getByRole("combobox", { name: "State", exact: true }).selectOption(p.state);
   if (p.email) await page.getByLabel("Email").fill(p.email);
   await page.getByRole("button", { name: "Save" }).click();
-  await page.waitForURL(`**${base}/parties`);
+  await page.waitForURL((u) => u.pathname === `${base}/parties`); // may carry ?notice= (party invited)
   await expect(page.getByRole("link", { name: p.name })).toBeVisible();
 }
 

@@ -19,6 +19,7 @@ export function MobileNav({
   perms,
   apps = [],
   layout,
+  badges,
 }: {
   header: ReactNode;
   top: ReactNode;
@@ -26,6 +27,7 @@ export function MobileNav({
   perms: string[];
   apps?: AppNavItem[];
   layout?: NavLayout;
+  badges?: Record<string, number>;
 }) {
   const [open, setOpen] = useState(false); // links close the drawer via onNavigate
   useEffect(() => {
@@ -62,7 +64,7 @@ export function MobileNav({
               </button>
             </div>
             {top}
-            <SideNav companyId={companyId} perms={perms} apps={apps} layout={layout} onNavigate={() => setOpen(false)} />
+            <SideNav companyId={companyId} perms={perms} apps={apps} layout={layout} badges={badges} onNavigate={() => setOpen(false)} />
           </div>
         </div>,
           document.body,
@@ -81,6 +83,7 @@ const LABELS: Record<string, string> = {
   "debit-notes": "Debit notes",
   payments: "Payments",
   purchases: "Purchase invoices",
+  received: "Received",
   "purchase-orders": "Purchase orders",
   parties: "Parties",
   products: "Products",

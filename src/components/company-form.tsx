@@ -121,6 +121,13 @@ export function CompanyForm({
             <input type="checkbox" name="pricesIncludeTax" defaultChecked={!!initial?.pricesIncludeTax} />
             Item prices include GST by default
           </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="inviteParties" defaultChecked={initial?.inviteParties === undefined ? true : !!initial.inviteParties} className="mt-1" />
+            <span>
+              Invite new customers and suppliers to MyGSTBook
+              <span className="block text-xs text-muted">Ticks the invite box on new parties. Each email is invited only once.</span>
+            </span>
+          </label>
         </section>
         )}
 

@@ -19,6 +19,8 @@ export interface PoFormInitial {
   paymentTerms: string;
   notes: string;
   items: LineValues[];
+  /** Created from a quotation received on MyGSTBook. */
+  received?: { id: string; from: string; number: string } | null;
 }
 
 export function PurchaseOrderForm({
@@ -65,11 +67,17 @@ export function PurchaseOrderForm({
           deliveryAddress: String(f.get("deliveryAddress")),
           paymentTerms: terms,
           notes: String(f.get("notes")),
+          receivedId: initial.received?.id ?? "",
           items: linesForSubmit(lines),
         });
       }}
     >
       {error && <Alert>{error}</Alert>}
+      {initial.received && (
+        <Alert kind="info">
+          Ordering from quotation <b>{initial.received.number}</b> by <b>{initial.received.from}</b>, received on MyGSTBook. Check the lines and dates, then save.
+        </Alert>
+      )}
       <Card className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Supplier" required error={fe.partyId} className="sm:col-span-2">
           <Select

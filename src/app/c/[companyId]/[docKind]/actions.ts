@@ -9,7 +9,8 @@ import { db } from "@/lib/db";
 import { DOC_KINDS, isDocKind, kindOfType } from "@/lib/doc-kinds";
 import { cancelDocument, isoOf, loadDocument, saveDocument, setQuotationStatus, type DocInput } from "@/lib/documents";
 import { formatPaise, toPaise } from "@/lib/gst/calc";
-import { escapeHtml, mailEnabled, sendMail } from "@/lib/mail";
+import { sendTemplate } from "@/lib/email-render";
+import { mailEnabled } from "@/lib/mail";
 import { renderDocumentPdf } from "@/lib/pdf/document-pdf";
 import { requireCompany } from "@/lib/tenant";
 
@@ -70,12 +71,12 @@ export async function emailDoc(companyId: string, id: string, to: string): Promi
     });
     const kind = DOC_KINDS[kindOfType(doc.type)];
     const from = doc.seller.tradeName || doc.seller.legalName;
-    await sendMail({
-      to: email,
-      subject: `${kind.singular} ${doc.number} from ${from}`,
-      html: `<p>Dear ${escapeHtml(doc.partyName)},</p><p>Please find attached ${kind.singular.toLowerCase()} <b>${escapeHtml(doc.number)}</b> dated ${doc.date} for <b>₹${formatPaise(doc.grandTotal)}</b>.</p><p>Regards,<br>${escapeHtml(from)}</p>`,
-      attachments: [{ filename: `${doc.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }],
-    });
+    await sendTemplate(
+      "document_email",
+      email,
+      { partyName: doc.partyName, docType: kind.singular, number: doc.number, date: doc.date, total: `₹${formatPaise(doc.grandTotal)}`, companyName: from },
+      { attachments: [{ filename: `${doc.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }] },
+    );
     await audit(ctx, "email", doc.type.toLowerCase(), id, { to: email });
     return ok(undefined, mailEnabled() ? `Sent to ${email}` : `Email not configured — logged to server console`);
   });

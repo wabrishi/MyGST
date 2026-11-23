@@ -99,6 +99,8 @@ model Company {
   upiId            String    @default("")
   terms            String?   @db.Text
   pricesIncludeTax Boolean   @default(false)
+  /// New parties with an email get an "Invite to MyGSTBook" tick box, ticked by default when this is on.
+  inviteParties    Boolean   @default(true)
   /// Books are locked (closed financial years) up to and including this date.
   lockedUntil      DateTime? @db.Date
   /// Set when the owner finishes the setup wizard.
@@ -129,7 +131,11 @@ model Company {
   pluginData     PluginData[]
   pluginRecords  PluginRecord[]
   pluginJobRuns  PluginJobRun[]
+  partyInvites   PartyInvite[]
+  sharedOut      SharedDocument[] @relation("SharedFrom")
+  sharedIn       SharedDocument[] @relation("SharedTo")
 
+  @@index([gstin])
   @@map("company")
 }
 
@@ -959,4 +965,77 @@ model ContactMessage {
   @@index([createdAt])
   @@index([ip, createdAt])
   @@map("contact_message")
+}
+
+/// A super admin's edited version of a system email (src/lib/email-templates.ts has the defaults).
+model EmailTemplate {
+  key       String   @id @db.VarChar(64)
+  subject   String   @db.VarChar(300)
+  body      String   @db.Text
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@map("email_template")
+}
+
+/// A party invited to join MyGSTBook (each email at most once, from any company).
+model PartyInvite {
+  id                 String    @id @default(cuid())
+  email              String    @unique @db.VarChar(191)
+  invitedByCompanyId String
+  partyId            String?
+  sentAt             DateTime  @default(now())
+  /// Set when someone signs up with this email.
+  joinedAt           DateTime?
+  company            Company   @relation(fields: [invitedByCompanyId], references: [id], onDelete: Cascade)
+
+  @@index([invitedByCompanyId])
+  @@map("party_invite")
+}
+
+enum SharedKind {
+  INVOICE
+  CREDIT_NOTE
+  DEBIT_NOTE
+  QUOTATION
+  PURCHASE_ORDER
+}
+
+enum SharedStatus {
+  NEW
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+/// A document one company addressed to another company on MyGSTBook (matched by GSTIN): the receiver's inbox.
+model SharedDocument {
+  id              String       @id @default(cuid())
+  fromCompanyId   String
+  toCompanyId     String
+  kind            SharedKind
+  /// The sender's Document id, or PurchaseOrder id for PURCHASE_ORDER.
+  sourceId        String
+  number          String       @db.VarChar(30)
+  date            DateTime     @db.Date
+  total           Decimal      @db.Decimal(14, 2)
+  /// What the receiver sees: parties, lines, totals (see src/lib/network.ts).
+  snapshot        Json
+  status          SharedStatus @default(NEW)
+  /// The sender changed it after it arrived.
+  updatedBySender Boolean      @default(false)
+  readAt          DateTime?
+  /// The receiver's purchase invoice / purchase order / document created from it.
+  acceptedRefId   String?
+  rejectReason    String?      @db.VarChar(300)
+  receivedAt      DateTime     @default(now())
+  actedAt         DateTime?
+  actedBy         String?
+  updatedAt       DateTime     @updatedAt
+  fromCompany     Company      @relation("SharedFrom", fields: [fromCompanyId], references: [id], onDelete: Cascade)
+  toCompany       Company      @relation("SharedTo", fields: [toCompanyId], references: [id], onDelete: Cascade)
+
+  @@unique([fromCompanyId, kind, sourceId])
+  @@index([toCompanyId, status, receivedAt])
+  @@map("shared_document")
 }

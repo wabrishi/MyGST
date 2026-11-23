@@ -10,7 +10,7 @@ import { APPS_SECTION_KEY, applyLayout, CORE_SECTIONS, DASHBOARD_ITEM, DEFAULT_L
 export type AppNavItem = { href: string; label: string; icon: string; section?: string; sectionKey: string; itemKey: string };
 
 /** One link, already resolved to an absolute path. */
-type Link_ = { key: string; href: string; label: string; icon: LucideIcon; external?: boolean; activeAlso?: string };
+type Link_ = { key: string; href: string; label: string; icon: LucideIcon; external?: boolean; activeAlso?: string; badge?: number };
 type Section = { key: string; title: string; items: Link_[] };
 
 const COLLAPSED_KEY = "mygst.nav.collapsed";
@@ -67,14 +67,21 @@ function subscribe(onChange: () => void) {
 }
 
 /** Core sections the member may see, then plugin sections; all in the order saved in Admin → Menu. */
-function buildSections(companyId: string, perms: string[], apps: AppNavItem[], layout: NavLayout): Section[] {
+function buildSections(companyId: string, perms: string[], apps: AppNavItem[], layout: NavLayout, badges: Record<string, number>): Section[] {
   const allowed = (perm?: string | readonly string[]) => !perm || (Array.isArray(perm) ? perm : [perm]).some((p) => perms.includes(p));
   const core: Section[] = CORE_SECTIONS.map((s) => ({
     key: s.key,
     title: s.title,
     items: s.items
       .filter((i) => allowed(i.perm as string | string[] | undefined))
-      .map((i) => ({ key: i.key, href: `/c/${companyId}/${i.href}`, label: i.label, icon: i.icon, ...(i.href === "settings" && { activeAlso: `/c/${companyId}/setup` }) })),
+      .map((i) => ({
+        key: i.key,
+        href: `/c/${companyId}/${i.href}`,
+        label: i.label,
+        icon: i.icon,
+        badge: badges[i.key],
+        ...(i.href === "settings" && { activeAlso: `/c/${companyId}/setup` }),
+      })),
   }));
   const plugin = new Map<string, Section>();
   for (const a of apps) {
@@ -103,6 +110,11 @@ function NavLink({ link, active, onNavigate }: { link: Link_; active: boolean; o
     >
       <Icon size={17} className={cn("shrink-0 transition-colors", active ? "text-primary" : "text-muted group-hover:text-foreground")} />
       <span className="truncate">{link.label}</span>
+      {!!link.badge && (
+        <span className="ml-auto rounded-full bg-primary px-1.5 py-px text-[10.5px] font-semibold leading-4 text-primary-foreground" aria-label={`${link.badge} new`}>
+          {link.badge > 99 ? "99+" : link.badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -134,16 +146,19 @@ export function SideNav({
   perms,
   apps = [],
   layout = DEFAULT_LAYOUT,
+  badges = {},
   onNavigate,
 }: {
   companyId: string;
   perms: string[];
   apps?: AppNavItem[];
   layout?: NavLayout;
+  /** Counts shown next to items (by item key), e.g. new received documents. */
+  badges?: Record<string, number>;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const sections = buildSections(companyId, perms, apps, layout);
+  const sections = buildSections(companyId, perms, apps, layout, badges);
   const collapsed = useSyncExternalStore(subscribe, getCollapsed, () => NONE);
   // The section holding the current page shows open even if it was collapsed, until the user closes it
   // again on this page.

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ShareStatus } from "@/components/share-status";
 import { StatusBadge } from "@/components/status-badge";
 import { Alert, Card, PageHeader, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
@@ -55,6 +56,7 @@ export default async function DocViewPage({ params }: PageProps<"/c/[companyId]/
       />
 
       <div className="mb-4 flex flex-col gap-2">
+        <ShareStatus companyId={ctx.companyId} kind={doc.type as "INVOICE" | "QUOTATION" | "CREDIT_NOTE" | "DEBIT_NOTE"} sourceId={doc.id} />
         {doc.type === "INVOICE" && doc.status === "ISSUED" && todayIST() > creditNoteDeadline(doc.date) && (
           <Alert kind="warning">
             The deadline to issue credit notes for this invoice ({creditNoteDeadline(doc.date)}) has passed.

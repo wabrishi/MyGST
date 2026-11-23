@@ -6,13 +6,14 @@ import { ok, run, UserError, type ActionResult } from "@/lib/action";
 import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { absoluteUrl, emitStandalone } from "@/lib/events/outbox";
+import { inviteParty } from "@/lib/party-invites";
 import { requireCompany } from "@/lib/tenant";
 import { partySchema, type PartyInput } from "@/lib/validation";
 
 export async function saveParty(
   companyId: string,
   id: string | null,
-  input: PartyInput & { returnTo?: string },
+  input: PartyInput & { returnTo?: string; invite?: boolean | string },
 ): Promise<ActionResult<{ id: string }>> {
   const res = await run(async () => {
     const ctx = await requireCompany(companyId, "masters.write");
@@ -39,10 +40,16 @@ export async function saveParty(
       stateCode: data.stateCode,
       url: absoluteUrl(`/c/${ctx.companyId}/parties/${partyId}`),
     });
+    // "Invite to MyGSTBook" ticked: one email, unless they're already on MyGSTBook or invited.
+    let message: string | undefined;
+    if ((input.invite === true || input.invite === "on") && data.email) {
+      const r = await inviteParty({ id: ctx.companyId, name: ctx.company.tradeName || ctx.company.legalName }, { id: partyId, name: data.name, email: data.email, gstin: data.gstin });
+      if (r === "sent") message = `Party saved. We've invited ${data.email} to MyGSTBook.`;
+    }
     revalidatePath(`/c/${ctx.companyId}/parties`);
-    return ok({ id: partyId });
+    return ok({ id: partyId }, message);
   });
-  if (res.ok && input.returnTo !== "none") redirect(`/c/${companyId}/parties`);
+  if (res.ok && input.returnTo !== "none") redirect(`/c/${companyId}/parties${res.message ? `?notice=${encodeURIComponent(res.message)}` : ""}`);
   return res;
 }
 

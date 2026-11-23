@@ -69,6 +69,8 @@ export const companySchema = z
       .default(""),
     terms: trimmed(2000).default(""),
     pricesIncludeTax: z.coerce.boolean().default(false),
+    /** Tick "Invite to MyGSTBook" by default on new parties. */
+    inviteParties: z.coerce.boolean().default(true),
   })
   .superRefine(gstinStateMatches);
 

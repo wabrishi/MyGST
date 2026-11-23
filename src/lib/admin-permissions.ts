@@ -17,6 +17,7 @@ export const ADMIN_PERMISSION_GROUPS = [
     items: [
       ["messages.view", "Read and answer website contact messages"],
       ["website.manage", "Edit the public website's contact details (mobile, email, address)"],
+      ["emails.manage", "Edit the email templates the platform sends"],
     ],
   },
   {
@@ -75,6 +76,7 @@ export const ADMIN_PAGES: ReadonlyArray<{ href: string; label: string; perm: Adm
   { href: "/admin/users", label: "Users", perm: "users.view" },
   { href: "/admin/messages", label: "Messages", perm: "messages.view" },
   { href: "/admin/website", label: "Website", perm: "website.manage" },
+  { href: "/admin/emails", label: "Emails", perm: "emails.manage" },
   { href: "/admin/plugins", label: "Plugins", perm: "plugins.manage" },
   { href: "/admin/audit", label: "Audit", perm: "audit.view" },
   { href: "/admin/system", label: "System", perm: "system.view" },

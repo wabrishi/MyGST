@@ -12,6 +12,7 @@ import { remainingQty } from "./po-status";
 import { recomputePoBilling } from "./purchase-orders";
 import type { CompanyContext } from "./tenant";
 import { isoDate, trimmed } from "./validation";
+import { acceptShare } from "./sharing";
 
 export const purchaseSchema = z.object({
   partyId: z.string().min(1, "Select a supplier"),
@@ -25,6 +26,8 @@ export const purchaseSchema = z.object({
   notes: trimmed(2000).default(""),
   /** The purchase order this invoice bills (lines carry the PO line in sourceId). */
   purchaseOrderId: z.string().max(40).optional().default(""),
+  /** Added from the Received inbox: the share it came from. */
+  receivedId: z.string().max(40).optional().default(""),
   items: z.array(lineSchema.extend({ sourceId: z.string().max(40).optional() })).min(1, "Add at least one item").max(200),
 });
 export type PurchaseInput = z.input<typeof purchaseSchema>;
@@ -116,6 +119,7 @@ export async function savePurchase(ctx: CompanyContext, id: string | null, raw: 
       billId = id;
     } else {
       billId = (await tx.purchaseBill.create({ data: { ...header, companyId: ctx.companyId, createdById: ctx.user.id } })).id;
+      await acceptShare(tx, ctx.companyId, input.receivedId, "INVOICE", billId, ctx.user.id);
     }
 
     await tx.purchaseItem.createMany({

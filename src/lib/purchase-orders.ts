@@ -5,6 +5,7 @@ import { db, runTx, type Tx } from "./db";
 import { isoOf, lineSchema } from "./documents";
 import { eventItems } from "./events/items";
 import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
+import { acceptShare, notifyShareReceived, syncPurchaseOrderShare, withdrawShare } from "./sharing";
 import { calcDocument, fromPaise, toPaise } from "./gst/calc";
 import { isStateCode, stateName } from "./gst/states";
 import { allocateNumber } from "./numbering";
@@ -29,6 +30,8 @@ export const poSchema = z.object({
   deliveryAddress: trimmed(1000).default(""),
   paymentTerms: trimmed(200).default(""),
   notes: trimmed(2000).default(""),
+  /** Created from a received quotation (the share it came from). */
+  receivedId: z.string().max(40).optional().default(""),
   items: z.array(poLine).min(1, "Add at least one item").max(200),
 });
 export type PurchaseOrderInput = z.input<typeof poSchema>;
@@ -44,12 +47,14 @@ export function companyDeliveryAddress(c: { legalName: string; tradeName: string
 export const defaultPaymentTerms = (creditDays: number) => (creditDays > 0 ? `Net ${creditDays} days` : "");
 
 export async function savePurchaseOrder(ctx: CompanyContext, id: string | null, raw: PurchaseOrderInput) {
-  const savedId = await writePurchaseOrder(ctx, id, raw);
+  const shared: { id: string | null } = { id: null };
+  const savedId = await writePurchaseOrder(ctx, id, raw, shared);
   await deliverSoon(ctx.companyId);
+  await notifyShareReceived(shared.id);
   return savedId;
 }
 
-async function writePurchaseOrder(ctx: CompanyContext, id: string | null, raw: PurchaseOrderInput) {
+async function writePurchaseOrder(ctx: CompanyContext, id: string | null, raw: PurchaseOrderInput, shared: { id: string | null }) {
   const input = poSchema.parse(raw);
   return runTx(async (tx) => {
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId } });
@@ -105,6 +110,9 @@ async function writePurchaseOrder(ctx: CompanyContext, id: string | null, raw: P
       });
       await tx.auditLog.create({ data: { companyId: ctx.companyId, userId: ctx.user.id, action: "create", entity: "purchase_order", entityId: po.id, data: { number } } });
       await emitPoSaved(tx, ctx.companyId, po.id, number, "CREATED", party, input, totals.grandTotal, lines);
+      // Supplier on MyGSTBook (same GSTIN)? The order arrives in their Received inbox.
+      shared.id = await syncPurchaseOrderShare(tx, ctx.companyId, po.id);
+      await acceptShare(tx, ctx.companyId, input.receivedId, "QUOTATION", po.id, ctx.user.id);
       return po.id;
     }
 
@@ -136,6 +144,7 @@ async function writePurchaseOrder(ctx: CompanyContext, id: string | null, raw: P
     await recomputePoBilling(tx, id);
     await tx.auditLog.create({ data: { companyId: ctx.companyId, userId: ctx.user.id, action: "update", entity: "purchase_order", entityId: id } });
     await emitPoSaved(tx, ctx.companyId, id, existing.number, "UPDATED", party, input, totals.grandTotal, lines);
+    shared.id = await syncPurchaseOrderShare(tx, ctx.companyId, id);
     return id;
   });
 }
@@ -195,6 +204,7 @@ async function setStatus(ctx: CompanyContext, id: string, action: "cancel" | "cl
       if (po.status === "CANCELLED") return;
       if (anyBilled) throw new UserError("This order has been billed. Close it instead to stop expecting the rest.");
       await tx.purchaseOrder.update({ where: { id }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+      await withdrawShare(tx, ctx.companyId, "PURCHASE_ORDER", id);
       await emitEvent(tx, ctx.companyId, "purchase_order.cancelled", {
         id,
         number: po.number,

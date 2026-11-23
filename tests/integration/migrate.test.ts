@@ -42,14 +42,14 @@ describe("startup migrations", { timeout: 240_000 }, () => {
     for (const n of Object.values(names)) await c.query(`CREATE DATABASE \`${n}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
     await c.end();
     tmp = mkdtempSync(join(tmpdir(), "mygst-mig-"));
-  });
+  }, 120_000); // creating databases waits behind other test files on a busy server
 
   afterAll(async () => {
     const c = await admin();
     for (const n of Object.values(names)) await c.query(`DROP DATABASE IF EXISTS \`${n}\``);
     await c.end();
     rmSync(tmp, { recursive: true, force: true });
-  });
+  }, 120_000);
 
   it("applies every migration to an empty database, then has nothing to do", async () => {
     const all = bundledMigrations().map((m) => m.name);

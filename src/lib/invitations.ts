@@ -1,7 +1,8 @@
 import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { db } from "./db";
-import { escapeHtml, mailEnabled, sendMail } from "./mail";
+import { sendTemplate } from "./email-render";
+import { mailEnabled } from "./mail";
 import { roleNames } from "./permissions";
 
 export const hashInviteToken = (t: string) => createHash("sha256").update(t).digest("hex");
@@ -39,12 +40,6 @@ export async function createInvitation(opts: {
 
   const roles = await db.companyRole.findMany({ where: { id: { in: opts.roleIds } }, select: { name: true } });
   const link = `${process.env.APP_URL ?? process.env.BETTER_AUTH_URL}/invite/${token}`;
-  await sendMail({
-    to: email,
-    subject: `${opts.invitedBy.name} invited you to ${opts.companyName} on MyGST`,
-    html: `<p>${escapeHtml(opts.invitedBy.name)} has invited you to join <b>${escapeHtml(opts.companyName)}</b> as <b>${escapeHtml(roleNames(roles))}</b>.</p>
-<p><a href="${escapeHtml(link)}">Accept invitation</a></p>
-<p>If you don't have a MyGST account yet, sign up with this email address first. The link expires in 7 days.</p>`,
-  });
+  await sendTemplate("member_invite", email, { inviterName: opts.invitedBy.name, companyName: opts.companyName, roles: roleNames(roles), url: link });
   return { link, emailed: mailEnabled() };
 }

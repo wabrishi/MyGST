@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ButtonLink, Card, PageHeader } from "@/components/ui";
 import { db } from "@/lib/db";
+import { partyNetworkStatus } from "@/lib/network";
 import { can } from "@/lib/permissions";
 import { requireCompany } from "@/lib/tenant";
 import { PartyForm } from "../party-form";
@@ -12,6 +13,18 @@ export default async function EditPartyPage({ params }: PageProps<"/c/[companyId
   const ctx = await requireCompany(companyId);
   const p = await db.party.findFirst({ where: { id: partyId, companyId: ctx.companyId } });
   if (!p) notFound();
+  const [status, { inviteParties }] = await Promise.all([
+    partyNetworkStatus({ gstin: p.gstin, email: p.email }, ctx.companyId),
+    db.company.findUniqueOrThrow({ where: { id: ctx.companyId }, select: { inviteParties: true } }),
+  ]);
+  const note =
+    status.kind === "on-portal"
+      ? `On MyGSTBook ✓${status.name ? ` as ${status.name}: documents you send them arrive in their books` : ""}`
+      : status.kind === "invited"
+        ? status.joinedAt
+          ? `Joined MyGSTBook on ${status.joinedAt.toISOString().slice(0, 10)}`
+          : `Invited to MyGSTBook on ${status.sentAt.toISOString().slice(0, 10)}`
+        : null;
 
   return (
     <div className="max-w-3xl">
@@ -31,6 +44,7 @@ export default async function EditPartyPage({ params }: PageProps<"/c/[companyId
           companyId={ctx.companyId}
           id={p.id}
           canDelete={can(ctx, "masters.delete")}
+          invite={{ defaultChecked: inviteParties && !p.email, note }}
           initial={{
             type: p.type,
             name: p.name,

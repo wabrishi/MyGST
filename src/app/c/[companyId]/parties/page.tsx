@@ -2,7 +2,7 @@ import Link from "next/link";
 import { PAGE_SIZE, Pager, pageFrom } from "@/components/pager";
 import { SearchBox } from "@/components/search-box";
 import { Users as UsersIcon } from "lucide-react";
-import { Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th } from "@/components/ui";
+import { Alert, Badge, ButtonLink, Card, Empty, FilterPills, PageHeader, Table, Td, Th } from "@/components/ui";
 import type { Prisma } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { stateName } from "@/lib/gst/states";
@@ -33,6 +33,11 @@ export default async function PartiesPage({ params, searchParams }: PageProps<"/
   return (
     <>
       <PageHeader title="Parties" subtitle="Customers and suppliers" actions={<ButtonLink href={`${base}/new`}>+ New party</ButtonLink>} />
+      {typeof sp.notice === "string" && (
+        <div className="mb-4">
+          <Alert kind="success">{sp.notice.slice(0, 200)}</Alert>
+        </div>
+      )}
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <SearchBox placeholder="Search name, GSTIN, phone" />
         <FilterPills

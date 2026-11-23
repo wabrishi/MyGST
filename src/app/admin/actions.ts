@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { createInvitation } from "@/lib/invitations";
 import { assertEmailHasNoCompany, assertNoCompany } from "@/lib/one-company";
 import { addMember, roleIdOf } from "@/lib/roles";
-import { escapeHtml, sendMail } from "@/lib/mail";
+import { sendTemplate } from "@/lib/email-render";
 import { optionalGstin, stateCode, trimmed } from "@/lib/validation";
 import { stateFromGstin } from "@/lib/gst/gstin";
 
@@ -53,11 +53,7 @@ export async function adminCreateCompany(input: NewCompanyInput): Promise<Action
     if (existingUser) {
       await addMember(db, { userId: existingUser.id, companyId: company.id, roleIds: [roleIdOf("OWNER")] });
       const url = `${process.env.APP_URL ?? process.env.BETTER_AUTH_URL}/c/${company.id}/setup`;
-      await sendMail({
-        to: ownerEmail,
-        subject: `${companyName} is ready on MyGST`,
-        html: `<p>Hi ${escapeHtml(existingUser.name)},</p><p>A company <b>${escapeHtml(companyName)}</b> has been created for you. You are its owner.</p><p><a href="${escapeHtml(url)}">Complete company setup</a></p>`,
-      });
+      await sendTemplate("company_ready", ownerEmail, { name: existingUser.name, companyName, url });
       revalidatePath("/admin");
       return ok<CreatedCompany>({ companyId: company.id, owner: "member" });
     }

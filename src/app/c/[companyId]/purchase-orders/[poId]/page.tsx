@@ -1,6 +1,7 @@
 import { Download, FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ShareStatus } from "@/components/share-status";
 import { ButtonLink, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
 import { formatINR } from "@/lib/gst/calc";
 import { todayIST } from "@/lib/gst/fy";
@@ -57,6 +58,7 @@ export default async function PurchaseOrderPage({ params }: PageProps<"/c/[compa
           </div>
         }
       />
+      <ShareStatus companyId={ctx.companyId} kind="PURCHASE_ORDER" sourceId={po.id} className="mb-4" />
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         <div className="flex min-w-0 flex-col gap-4">

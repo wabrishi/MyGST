@@ -1,7 +1,8 @@
 import "server-only";
 import { db } from "./db";
-import { contactEmailHtml, RATE_LIMIT, type ContactInput } from "./contact";
-import { sendMail } from "./mail";
+import { RATE_LIMIT, type ContactInput } from "./contact";
+import { sendTemplate } from "./email-render";
+import { formatMobile } from "./phone";
 import { getSiteContact } from "./site-store";
 
 export class RateLimited extends Error {}
@@ -19,7 +20,7 @@ export async function saveContactMessage(input: ContactInput, meta: { ip: string
   const to = (await getSiteContact()).notifyEmail;
   if (to) {
     try {
-      await sendMail({ to, subject: `[Website] ${input.topic}: ${input.name}`.slice(0, 150), html: contactEmailHtml(input) });
+      await sendTemplate("contact_notification", to, { ...input, mobile: formatMobile(input.phone) });
     } catch (e) {
       console.error("[contact] email failed:", (e as Error).message);
     }

@@ -22,6 +22,8 @@ export interface PurchaseFormInitial {
   items: LineValues[];
   /** Billing a purchase order: its id and number (lines carry the PO line in sourceId). */
   purchaseOrder?: { id: string; number: string } | null;
+  /** Added from the Received inbox: the share and who sent it. */
+  received?: { id: string; from: string; number: string } | null;
 }
 
 export function PurchaseForm({
@@ -63,11 +65,17 @@ export function PurchaseForm({
           pricesIncludeTax: inclusive,
           notes: String(f.get("notes")),
           purchaseOrderId: initial.purchaseOrder?.id ?? "",
+          receivedId: initial.received?.id ?? "",
           items: linesForSubmit(lines),
         });
       }}
     >
       {error && <Alert>{error}</Alert>}
+      {initial.received && (
+        <Alert kind="info">
+          Adding invoice <b>{initial.received.number}</b> from <b>{initial.received.from}</b>, received on MyGSTBook. Check the lines, choose your products and the ITC type, then save.
+        </Alert>
+      )}
       {initial.purchaseOrder && (
         <Alert kind="info">
           Billing purchase order{" "}
