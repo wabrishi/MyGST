@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 import { db } from "./db";
 import { sendTemplate } from "./email-render";
+import { verificationRequired } from "./email-verification";
 import { MOBILE_ERROR, normalizeMobile } from "./phone";
 
 /** Session cookie prefix — suite apps on one host (localhost shares cookies across ports) must not clash. */
@@ -19,8 +20,19 @@ export const auth = betterAuth({
     enabled: true,
     minPasswordLength: 8,
     revokeSessionsOnPasswordReset: true,
+    // New accounts must click the emailed link before they can sign in (accounts made before this are marked verified).
+    requireEmailVerification: verificationRequired(),
     sendResetPassword: async ({ user, url }) => {
       await sendTemplate("password_reset", user.email, { name: user.name, url });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: verificationRequired(),
+    sendOnSignIn: true, // an unverified sign-in attempt sends a fresh link
+    autoSignInAfterVerification: true,
+    expiresIn: 60 * 60 * 24,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendTemplate("verify_email", user.email, { name: user.name, url });
     },
   },
   session: {

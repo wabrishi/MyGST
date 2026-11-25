@@ -8,6 +8,7 @@
 
 export type TemplateKey =
   | "password_reset"
+  | "verify_email"
   | "member_invite"
   | "company_ready"
   | "document_email"
@@ -39,6 +40,17 @@ export const TEMPLATES: TemplateDef[] = [
 <p>Click the button below to reset your password. It expires in 1 hour.</p>
 <p><a class="btn" href="{{url}}">Reset password</a></p>
 <p>If you didn't request this, you can ignore this email.</p>`,
+  },
+  {
+    key: "verify_email",
+    label: "Verify email address",
+    description: "Sent after sign-up (and when an unverified user tries to sign in). The account can't be used until the link is clicked.",
+    vars: { ...brandVar, name: { help: "User's name", sample: "Asha Rao" }, url: { help: "Verification link (valid 24 hours)", sample: "https://example.com/api/auth/verify-email?token=…" } },
+    subject: "Confirm your email for {{brand}}",
+    body: `<p>Hi {{name}},</p>
+<p>Welcome to {{brand}}! Please confirm your email address to finish creating your account.</p>
+<p><a class="btn" href="{{url}}">Verify email</a></p>
+<p class="muted">The link expires in 24 hours. If you didn't sign up for {{brand}}, you can ignore this email.</p>`,
   },
   {
     key: "member_invite",

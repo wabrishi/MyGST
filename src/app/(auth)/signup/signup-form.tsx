@@ -13,6 +13,10 @@ function SignupForm() {
   const params = useSearchParams();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const [sentTo, setSentTo] = useState("");
+  const next = safeNext(params.get("next"), "/onboarding");
+  // Where the emailed link lands: it shows link errors, otherwise continues to `next`.
+  const callbackURL = `/email-verified?next=${encodeURIComponent(next)}`;
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -23,17 +27,23 @@ function SignupForm() {
     if (password !== String(form.get("confirm"))) return setError("Passwords do not match");
     setPending(true);
     setError("");
-    const { error } = await authClient.signUp.email({
+    const email = String(form.get("email")).trim();
+    const { data, error } = await authClient.signUp.email({
       name: String(form.get("name")).trim(),
-      email: String(form.get("email")).trim(),
+      email,
       phone,
       password,
+      callbackURL,
     });
     setPending(false);
     if (error) return setError(error.message || "Could not create account");
-    router.replace(safeNext(params.get("next"), "/onboarding"));
+    // No session yet: the account must be verified from the emailed link first.
+    if (!data?.token) return setSentTo(email);
+    router.replace(next);
     router.refresh();
   }
+
+  if (sentTo) return <CheckEmail email={sentTo} callbackURL={callbackURL} onBack={() => setSentTo("")} />;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
@@ -65,6 +75,43 @@ function SignupForm() {
         </Link>
       </p>
     </form>
+  );
+}
+
+/** Shown after sign-up when the email must be verified first. */
+export function CheckEmail({ email, callbackURL, onBack }: { email: string; callbackURL: string; onBack?: () => void }) {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  async function resend() {
+    setState("sending");
+    const { error } = await authClient.sendVerificationEmail({ email, callbackURL });
+    setState(error ? "error" : "sent");
+  }
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="mb-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Check your email</h1>
+        <p className="mt-1.5 text-sm text-muted">
+          We sent a verification link to <b className="text-foreground">{email}</b>. Click it to finish creating your account. The link is valid for 24 hours.
+        </p>
+      </div>
+      {state === "sent" && <Alert kind="success">A new link is on its way.</Alert>}
+      {state === "error" && <Alert>Could not send the email. Please try again in a minute.</Alert>}
+      <p className="text-sm text-muted">Can&apos;t find it? Check your spam folder, or send it again.</p>
+      <Button type="button" variant="secondary" size="lg" disabled={state === "sending"} onClick={resend}>
+        {state === "sending" ? "Sending…" : "Resend email"}
+      </Button>
+      <p className="text-center text-sm text-muted">
+        {onBack ? (
+          <button type="button" onClick={onBack} className="font-medium text-primary hover:underline">
+            Wrong email? Sign up again
+          </button>
+        ) : null}
+        {onBack ? " · " : null}
+        <Link href="/login" className="font-medium text-primary hover:underline">
+          Back to sign in
+        </Link>
+      </p>
+    </div>
   );
 }
 

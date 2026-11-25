@@ -18,11 +18,17 @@ function LoginForm() {
     const form = new FormData(e.currentTarget);
     setPending(true);
     setError("");
+    const next = safeNext(params.get("next"));
     const { error } = await authClient.signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
+      // Used by the fresh verification link sent when the email isn't verified yet.
+      callbackURL: `/email-verified?next=${encodeURIComponent(next)}`,
     });
     setPending(false);
+    if (error?.code === "EMAIL_NOT_VERIFIED") {
+      return setError("Please verify your email first. We've sent you a new link. Check your inbox (and spam folder).");
+    }
     if (error) return setError(error.message || "Invalid email or password");
     router.replace(safeNext(params.get("next")));
     router.refresh();

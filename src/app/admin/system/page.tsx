@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge, Card, CardHeader, PageHeader, Table, Td, Th } from "@/components/ui";
 import { isSuperAdmin, requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
+import { verificationRequired } from "@/lib/email-verification";
 import { mailEnabled } from "@/lib/mail";
 import { autoMigrateEnabled, lastMigrationRun } from "@/lib/migrate";
 import { ApplyMigrationsButton, RetryEventsButton } from "./system-client";
@@ -77,6 +78,13 @@ export default async function AdminSystemPage() {
     { ok: !!process.env.CRON_SECRET, label: "CRON_SECRET", hint: "Needed by the Hostinger Cron Job that calls /api/cron/tick." },
     { ok: ago(cronAt) < 15, label: "Cron is running", hint: `Last tick: ${when(cronAt)} (expected every minute).` },
     { ok: mailEnabled(), label: "Email (SMTP)", hint: "Invitations and password resets are emailed only when SMTP_HOST is set." },
+    {
+      ok: verificationRequired(),
+      label: "Email verification for new accounts",
+      hint: verificationRequired()
+        ? "On: new users must click the emailed link before signing in."
+        : "Off: turns on automatically when SMTP is set (or force it with EMAIL_VERIFICATION=on).",
+    },
     {
       ok: !!process.env.BETTER_AUTH_URL && (process.env.NODE_ENV !== "production" || !/localhost/.test(process.env.BETTER_AUTH_URL)),
       label: "BETTER_AUTH_URL",

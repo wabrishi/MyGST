@@ -12,13 +12,17 @@ const DRIVE = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 export const DRIVE_SCOPES = ["https://www.googleapis.com/auth/drive.file", "openid", "email"];
 
-export const googleConfigured = () => !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+/** A setting as typed in a hosting panel: surrounding spaces and quotes removed (Google rejects them as invalid_client). */
+const setting = (name: string) => (process.env[name] ?? "").trim().replace(/^["']|["']$/g, "").trim();
 
-export const redirectUri = () => `${process.env.APP_URL ?? process.env.BETTER_AUTH_URL}/api/backup/google/callback`;
+export const googleConfigured = () => !!(setting("GOOGLE_CLIENT_ID") && setting("GOOGLE_CLIENT_SECRET"));
+
+/** Must match an "Authorized redirect URI" of the OAuth client exactly. */
+export const redirectUri = () => `${(setting("APP_URL") || setting("BETTER_AUTH_URL")).replace(/\/+$/, "")}/api/backup/google/callback`;
 
 function creds() {
-  const id = process.env.GOOGLE_CLIENT_ID;
-  const secret = process.env.GOOGLE_CLIENT_SECRET;
+  const id = setting("GOOGLE_CLIENT_ID");
+  const secret = setting("GOOGLE_CLIENT_SECRET");
   if (!id || !secret) throw new Error("Google Drive is not configured (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)");
   return { id, secret };
 }

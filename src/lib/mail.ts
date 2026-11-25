@@ -27,7 +27,9 @@ export const mailEnabled = () => !!process.env.SMTP_HOST;
 export async function sendMail({ to, subject, html, attachments }: MailInput) {
   const t = getTransporter();
   if (!t) {
-    console.info(`[mail:dev] to=${to} subject="${subject}"\n${html.replace(/<[^>]+>/g, " ")}`);
+    // Links live in href attributes, which stripping the tags would drop — list them so they can be clicked.
+    const links = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
+    console.info(`[mail:dev] to=${to} subject="${subject}"\n${html.replace(/<[^>]+>/g, " ")}${links.length ? `\nLinks:\n${links.join("\n")}` : ""}`);
     return;
   }
   await t.sendMail({ from: process.env.MAIL_FROM || process.env.SMTP_USER, to, subject, html, attachments });
