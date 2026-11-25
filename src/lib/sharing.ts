@@ -199,7 +199,15 @@ export async function notifyShareReceived(shareId: string | null) {
       where: { companyId: s.toCompanyId, roles: { some: { roleId: BUILTIN_ROLE_ID.OWNER } }, user: { disabledAt: null } },
       select: { user: { select: { email: true } } },
     });
+    if (!owners.length) return;
     const base = (process.env.APP_URL || process.env.BETTER_AUTH_URL || "").replace(/\/+$/, "");
+    // The sender's PDF goes along as an attachment (the email still goes out if it can't be made).
+    const { pdfFileName, sharedDocumentPdf } = await import("./share-pdf"); // loaded here: share-pdf imports documents.ts, which imports this file
+    const pdf = await sharedDocumentPdf(s, s.fromCompany).catch((e) => {
+      console.error("[sharing] PDF for notification failed:", (e as Error).message);
+      return null;
+    });
+    const attachments = pdf ? [{ filename: pdfFileName(s.number), content: pdf, contentType: "application/pdf" }] : [];
     for (const o of owners) {
       await sendTemplate("document_received", o.user.email, {
         companyName: s.toCompany.tradeName || s.toCompany.legalName,
@@ -208,7 +216,7 @@ export async function notifyShareReceived(shareId: string | null) {
         number: s.number,
         total: formatINR(toPaise(n(s.total))),
         url: `${base}/c/${s.toCompanyId}/received/${s.id}`,
-      });
+      }, { attachments });
     }
   } catch (e) {
     console.error("[sharing] notify failed:", (e as Error).message);

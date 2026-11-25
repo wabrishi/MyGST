@@ -8,6 +8,7 @@ import { audit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { formatPaise } from "@/lib/gst/calc";
 import { sendTemplate } from "@/lib/email-render";
+import { emailDate } from "@/lib/email-templates";
 import { mailEnabled } from "@/lib/mail";
 import { purchaseOrderPdfFor } from "@/lib/pdf/purchase-order-pdf";
 import {
@@ -57,7 +58,7 @@ export async function emailPO(companyId: string, id: string, to: string): Promis
     await sendTemplate(
       "po_email",
       email,
-      { partyName: po.partyName, number: po.number, date: po.date, total: `₹${formatPaise(po.grandTotal)}`, expectedDate: po.expectedDate || "", companyName: from },
+      { partyName: po.partyName, number: po.number, date: emailDate(po.date), total: `₹${formatPaise(po.grandTotal)}`, expectedDate: emailDate(po.expectedDate), companyName: from },
       { attachments: [{ filename: `${po.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }] },
     );
     await audit(ctx, "email", "purchase_order", id, { to: email });

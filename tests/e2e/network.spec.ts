@@ -85,7 +85,7 @@ test("super admin edits an email template, previews, tests and resets it", async
   await subject.fill("{{companyName}} wants to work with you on {{brand}}");
   await admin.getByRole("button", { name: "Save", exact: true }).click();
   await expect(admin.getByText(/Template saved/)).toBeVisible();
-  await admin.getByRole("button", { name: "Send test to me" }).click();
+  await admin.getByRole("button", { name: "Send test", exact: true }).click();
   await expect(admin.getByText(/Test sent|printed in the server log/)).toBeVisible();
 
   await admin.goto("/admin/emails");

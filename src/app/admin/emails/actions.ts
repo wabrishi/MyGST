@@ -7,6 +7,7 @@ import { adminAudit, requireAdminAction } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { renderTemplate, sampleVars, templateDef, usedVars } from "@/lib/email-templates";
 import { mailEnabled, sendMail } from "@/lib/mail";
+import { samplePdfAttachment } from "@/lib/pdf/sample-document";
 
 const input = z.object({
   subject: z.string().trim().min(1, "Enter a subject").max(300),
@@ -49,13 +50,16 @@ export async function adminResetTemplate(key: string): Promise<ActionResult> {
   });
 }
 
-/** Sends the (unsaved) draft with sample values to the signed-in admin. */
-export async function adminSendTestTemplate(key: string, raw: { subject: string; body: string }): Promise<ActionResult> {
+/** Sends the (unsaved) draft with sample values to the given address (the signed-in admin's by default). */
+export async function adminSendTestTemplate(key: string, raw: { subject: string; body: string; to?: string }): Promise<ActionResult> {
   return run(async () => {
     const admin = await requireAdminAction("emails.manage");
     const { def, t } = check(key, raw);
+    const to = z.email("Enter a valid email to send the test to").parse((raw.to || admin.user.email).trim());
     const { subject, html } = renderTemplate(t, sampleVars(def));
-    await sendMail({ to: admin.user.email, subject: `[Test] ${subject}`, html });
-    return ok(undefined, mailEnabled() ? `Test sent to ${admin.user.email}` : "Email isn't configured (SMTP_HOST): the test was printed in the server log");
+    const attachments = def.attachesPdf ? [await samplePdfAttachment()] : undefined;
+    await sendMail({ to, subject: `[Test] ${subject}`, html, attachments });
+    const pdf = attachments ? " with a sample PDF attached" : "";
+    return ok(undefined, mailEnabled() ? `Test sent to ${to}${pdf}` : `Email isn't configured (SMTP_HOST): the test${pdf} was printed in the server log`);
   });
 }

@@ -10,6 +10,7 @@ import { DOC_KINDS, isDocKind, kindOfType } from "@/lib/doc-kinds";
 import { cancelDocument, isoOf, loadDocument, saveDocument, setQuotationStatus, type DocInput } from "@/lib/documents";
 import { formatPaise, toPaise } from "@/lib/gst/calc";
 import { sendTemplate } from "@/lib/email-render";
+import { emailDate } from "@/lib/email-templates";
 import { mailEnabled } from "@/lib/mail";
 import { renderDocumentPdf } from "@/lib/pdf/document-pdf";
 import { requireCompany } from "@/lib/tenant";
@@ -74,7 +75,7 @@ export async function emailDoc(companyId: string, id: string, to: string): Promi
     await sendTemplate(
       "document_email",
       email,
-      { partyName: doc.partyName, docType: kind.singular, number: doc.number, date: doc.date, total: `₹${formatPaise(doc.grandTotal)}`, companyName: from },
+      { partyName: doc.partyName, docType: kind.singular, number: doc.number, date: emailDate(doc.date), total: `₹${formatPaise(doc.grandTotal)}`, companyName: from },
       { attachments: [{ filename: `${doc.number.replace(/[^A-Za-z0-9-]/g, "_")}.pdf`, content: pdf, contentType: "application/pdf" }] },
     );
     await audit(ctx, "email", doc.type.toLowerCase(), id, { to: email });

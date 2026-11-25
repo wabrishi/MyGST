@@ -9,7 +9,7 @@ import { TemplateEditor } from "./template-editor";
 export const metadata = { title: "Edit email" };
 
 export default async function AdminEmailTemplatePage({ params }: PageProps<"/admin/emails/[key]">) {
-  await requireAdmin("emails.manage");
+  const admin = await requireAdmin("emails.manage");
   const { key } = await params;
   const def = templateDef(key);
   if (!def) notFound();
@@ -34,6 +34,8 @@ export default async function AdminEmailTemplatePage({ params }: PageProps<"/adm
         defaults={{ subject: def.subject, body: def.body }}
         vars={Object.entries(def.vars).map(([name, v]) => ({ name, help: v.help, sample: v.sample }))}
         edited={t.edited}
+        attachesPdf={!!def.attachesPdf}
+        adminEmail={admin.user.email}
       />
     </>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { Paperclip } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { useAction } from "@/components/form-utils";
@@ -16,17 +17,22 @@ export function TemplateEditor({
   defaults,
   vars,
   edited,
+  attachesPdf,
+  adminEmail,
 }: {
   templateKey: string;
   initial: { subject: string; body: string };
   defaults: { subject: string; body: string };
   vars: Var[];
   edited: boolean;
+  attachesPdf: boolean;
+  adminEmail: string;
 }) {
   const router = useRouter();
   const [subject, setSubject] = useState(initial.subject);
   const [body, setBody] = useState(initial.body);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [testTo, setTestTo] = useState(adminEmail);
   // Only the latest action's result is shown.
   const [last, setLast] = useState<"save" | "test" | "reset" | null>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -60,10 +66,18 @@ export function TemplateEditor({
           <Field label="Subject">
             <Input value={subject} onChange={(e) => setSubject(e.target.value)} maxLength={300} />
           </Field>
-          <Field label="Body (HTML)" hint={'Use <p>, <b>, <a class="btn" href="…"> for a button, <p class="muted"> for small grey text.'}>
+          <Field label="Body (HTML)" hint={'Building blocks: <h1> heading, <p> text, <b> bold, <a class="btn" href="…"> button, <p class="muted"> small grey text, <ul><li> list, <blockquote> quote, <table class="summary"> with <tr><td>Label</td><td>Value</td></tr> rows (<tr class="total"> for a bold total), <p class="sign"> sign-off.'}>
             <Textarea ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} rows={14} className="font-mono text-[12.5px]" spellCheck={false} />
           </Field>
           {unknown.length > 0 && <Alert kind="warning">Unknown variable{unknown.length > 1 ? "s" : ""}: {unknown.map((v) => `{{${v}}}`).join(", ")}</Alert>}
+          <Field label="Send test to" hint={attachesPdf ? "The test includes a sample PDF, like the real email's document attachment." : "Sample values are used for every variable."}>
+            <Input type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} autoComplete="email" />
+          </Field>
+          {attachesPdf && (
+            <p className="-mt-1 inline-flex items-center gap-1.5 text-xs text-muted">
+              <Paperclip size={13} /> The document&apos;s PDF is attached to this email automatically.
+            </p>
+          )}
           {last && { save, test, reset }[last].error && <Alert>{{ save, test, reset }[last].error}</Alert>}
           {last && { save, test, reset }[last].message && <Alert kind="success">{{ save, test, reset }[last].message}</Alert>}
           <div className="flex flex-wrap items-center gap-2">
@@ -76,12 +90,12 @@ export function TemplateEditor({
             >
               {save.pending ? "Saving…" : "Save"}
             </Button>
-            <Button variant="secondary" disabled={test.pending || unknown.length > 0} onClick={() => {
+            <Button variant="secondary" disabled={test.pending || unknown.length > 0 || !testTo.trim()} onClick={() => {
                 setLast("test");
-                test.execute({ subject, body });
+                test.execute({ subject, body, to: testTo });
               }}
             >
-              {test.pending ? "Sending…" : "Send test to me"}
+              {test.pending ? "Sending…" : "Send test"}
             </Button>
             {dirty && (
               <Button
