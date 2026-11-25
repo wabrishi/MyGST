@@ -4,6 +4,6 @@ const base = () => (process.env.APP_URL || process.env.BETTER_AUTH_URL || "http:
 
 /** The public website's pages, for search engines. */
 export default function sitemap(): MetadataRoute.Sitemap {
-  const pages = ["", "/features", "/pricing", "/about", "/contact", "/signup"];
+  const pages = ["", "/features", "/pricing", "/about", "/contact", "/signup", "/privacy", "/terms"];
   return pages.map((p) => ({ url: `${base()}${p}`, changeFrequency: "monthly", priority: p === "" ? 1 : 0.7 }));
 }

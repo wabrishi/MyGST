@@ -83,7 +83,15 @@ export default async function SiteLayout({ children }: LayoutProps<"/">) {
             <span>
               © {year} {BRAND}. All rights reserved.
             </span>
-            <span>Made in India for Indian businesses</span>
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link href="/privacy" className="hover:text-primary">
+                Privacy policy
+              </Link>
+              <Link href="/terms" className="hover:text-primary">
+                Terms of service
+              </Link>
+              <span>Made in India for Indian businesses</span>
+            </span>
           </div>
         </div>
       </footer>

@@ -68,6 +68,17 @@ function SignupForm() {
         <Input name="confirm" type="password" autoComplete="new-password" required minLength={8} />
       </Field>
       <Button size="lg" disabled={pending}>{pending ? "Creating…" : "Create account"}</Button>
+      <p className="-mt-2 text-center text-xs text-muted">
+        By creating an account you agree to our{" "}
+        <Link href="/terms" target="_blank" className="underline hover:text-primary">
+          Terms of service
+        </Link>{" "}
+        and{" "}
+        <Link href="/privacy" target="_blank" className="underline hover:text-primary">
+          Privacy policy
+        </Link>
+        .
+      </p>
       <p className="text-center text-sm text-muted">
         Already have an account?{" "}
         <Link href="/login" className="font-medium text-primary hover:underline">
