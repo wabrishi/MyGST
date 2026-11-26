@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useAction } from "@/components/form-utils";
 import { Alert, Button, Input } from "@/components/ui";
-import { markRecorded, rejectShare, startAccept } from "../actions";
+import { formatINR } from "@/lib/gst/calc";
+import { markRecorded, matchPayment, rejectShare, startAccept } from "../actions";
 
 type Accept = { label: string; target: "invoice" | "quotation" | "default" };
 
@@ -72,6 +74,57 @@ export function ReceivedActions({ companyId, shareId, accepts, recordOnly, canRe
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+type Candidate = { id: string; date: string; amount: number; mode: string; reference: string; sameAmount: boolean; difference: number };
+
+/** "Did you already record this?": link the sender's payment to one we entered by hand. */
+export function MatchPayments({ companyId, shareId, candidates, base }: { companyId: string; shareId: string; candidates: Candidate[]; base: string }) {
+  const router = useRouter();
+  const match = useAction(matchPayment);
+  const [busy, setBusy] = useState("");
+  return (
+    <div className="flex flex-col gap-3">
+      {match.error && <Alert>{match.error}</Alert>}
+      {match.message && <Alert kind="success">{match.message}</Alert>}
+      <ul className="divide-y divide-border rounded-lg border border-border">
+        {candidates.map((c) => (
+          <li key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-3.5 py-3 text-sm">
+            <div className="min-w-0 flex-1">
+              <Link href={`${base}/payments/${c.id}`} className="tabular font-semibold hover:text-primary">
+                {formatINR(c.amount)}
+              </Link>
+              <span className="text-muted">
+                {" "}· {c.date} · {c.mode}
+                {c.reference && ` · Ref ${c.reference}`}
+              </span>
+              <div className="mt-0.5 text-xs">
+                {c.sameAmount ? (
+                  <span className="font-medium text-success">Same amount</span>
+                ) : (
+                  <span className="text-warning">
+                    Amounts differ by {formatINR(Math.abs(c.difference))}: check before matching
+                  </span>
+                )}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant={c.sameAmount ? "primary" : "secondary"}
+              disabled={match.pending}
+              onClick={async () => {
+                setBusy(c.id);
+                if ((await match.execute(companyId, shareId, c.id))?.ok) router.refresh();
+                setBusy("");
+              }}
+            >
+              {busy === c.id ? "Matching…" : "Match"}
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

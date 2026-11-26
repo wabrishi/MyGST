@@ -999,6 +999,7 @@ enum SharedKind {
   DEBIT_NOTE
   QUOTATION
   PURCHASE_ORDER
+  PAYMENT
 }
 
 enum SharedStatus {
@@ -1014,7 +1015,7 @@ model SharedDocument {
   fromCompanyId   String
   toCompanyId     String
   kind            SharedKind
-  /// The sender's Document id, or PurchaseOrder id for PURCHASE_ORDER.
+  /// The sender's Document id, PurchaseOrder id for PURCHASE_ORDER, or Payment id for PAYMENT.
   sourceId        String
   number          String       @db.VarChar(30)
   date            DateTime     @db.Date

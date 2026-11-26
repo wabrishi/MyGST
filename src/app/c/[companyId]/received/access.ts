@@ -7,6 +7,7 @@ export function visibleKinds(ctx: Grants): SharedKind[] {
   if (can(ctx, "purchases.view")) kinds.push("INVOICE", "CREDIT_NOTE", "DEBIT_NOTE");
   if (can(ctx, "purchaseOrders.view")) kinds.push("QUOTATION");
   if (can(ctx, "docs.create")) kinds.push("PURCHASE_ORDER");
+  if (can(ctx, "payments.view")) kinds.push("PAYMENT");
   return kinds;
 }
 
@@ -14,6 +15,7 @@ export function visibleKinds(ctx: Grants): SharedKind[] {
 export function canActOn(ctx: Grants, kind: SharedKind) {
   if (kind === "INVOICE" || kind === "CREDIT_NOTE" || kind === "DEBIT_NOTE") return can(ctx, "purchases.write");
   if (kind === "QUOTATION") return can(ctx, "purchaseOrders.write");
+  if (kind === "PAYMENT") return can(ctx, "payments.write");
   return can(ctx, "docs.create");
 }
 

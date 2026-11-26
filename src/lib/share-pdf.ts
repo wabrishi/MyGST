@@ -10,6 +10,7 @@ import { loadPurchaseOrder } from "./purchase-orders";
  * that the share is addressed to the company asking for it.
  */
 export async function sharedDocumentPdf(share: { kind: SharedKind; sourceId: string; fromCompanyId: string }, sender: Company): Promise<Buffer | null> {
+  if (share.kind === "PAYMENT") return null; // payments have no PDF
   if (share.kind === "PURCHASE_ORDER") {
     const po = await loadPurchaseOrder(share.fromCompanyId, share.sourceId);
     return po ? purchaseOrderPdfFor(po, sender) : null;

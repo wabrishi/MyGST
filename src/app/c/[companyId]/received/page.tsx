@@ -42,7 +42,7 @@ export default async function ReceivedPage({ params, searchParams }: PageProps<"
 
   return (
     <>
-      <PageHeader title="Received" subtitle="Invoices, notes, quotations and purchase orders other businesses on MyGSTBook sent you. Nothing enters your books until you add it." />
+      <PageHeader title="Received" subtitle="Invoices, notes, quotations, purchase orders and payments other businesses on MyGSTBook sent you. Nothing enters your books until you add or confirm it." />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <FilterPills active={status} items={FILTERS.map(([v, l]) => ({ value: v, label: l, href: href({ status: v }) }))} />
         <FilterPills
@@ -53,7 +53,7 @@ export default async function ReceivedPage({ params, searchParams }: PageProps<"
       <Card>
         {rows.length === 0 ? (
           <Empty icon={Inbox} title={status === "" ? "Nothing to review" : "Nothing here"}>
-            When a supplier or customer on MyGSTBook sends you a document addressed to your GSTIN, it appears here.
+            When a supplier or customer on MyGSTBook sends you a document or records a payment to you, addressed to your GSTIN, it appears here.
           </Empty>
         ) : (
           <Table>

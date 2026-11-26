@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ShareStatus } from "@/components/share-status";
 import { Card, PageHeader, Table, Td, Th } from "@/components/ui";
 import { db } from "@/lib/db";
 import { isoOf } from "@/lib/documents";
@@ -37,6 +38,7 @@ export default async function PaymentPage({ params }: PageProps<"/c/[companyId]/
         subtitle={`${isoOf(p.date)} · ${p.mode}${p.reference ? ` · Ref ${p.reference}` : ""}`}
         actions={<DeletePaymentButton companyId={ctx.companyId} paymentId={p.id} />}
       />
+      {p.direction === "PAID" && <ShareStatus companyId={ctx.companyId} kind="PAYMENT" sourceId={p.id} className="mb-4" />}
       <Card className="tabular mb-4 grid grid-cols-3 gap-4 p-4">
         <div>
           <div className="text-xs text-muted">Amount</div>

@@ -8,6 +8,7 @@ import { absoluteUrl, deliverSoon, emitEvent } from "./events/outbox";
 import { assertNotLocked } from "./fy-context";
 import { fromPaise, toPaise } from "./gst/calc";
 import type { CompanyContext } from "./tenant";
+import { acceptShare, notifyShareReceived, syncPaymentShare, withdrawShare } from "./sharing";
 import { isoDate, trimmed } from "./validation";
 
 export const PAYMENT_MODES = ["CASH", "UPI", "BANK", "CHEQUE", "CARD", "OTHER"] as const;
@@ -24,6 +25,8 @@ export const paymentSchema = z.object({
     .array(z.object({ targetId: z.string().min(1), amount: z.coerce.number().min(0) }))
     .max(500)
     .default([]),
+  /** A payment another company on MyGSTBook told us about (Received inbox), confirmed by saving this. */
+  receivedId: z.string().max(40).optional().default(""),
 });
 export type PaymentInput = z.input<typeof paymentSchema>;
 
@@ -106,7 +109,7 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
   if (allocated > amount) throw new UserError("Allocated amount exceeds the payment amount");
   if (new Set(allocations.map((a) => a.targetId)).size !== allocations.length) throw new UserError("Duplicate allocation");
 
-  const paymentId = await runTx(async (tx) => {
+  const { paymentId, shareId } = await runTx(async (tx) => {
     await assertNotLocked(tx, ctx.companyId, input.date);
     const party = await tx.party.findFirst({ where: { id: input.partyId, companyId: ctx.companyId } });
     if (!party) throw new UserError("Select a valid party", "partyId");
@@ -180,9 +183,13 @@ export async function savePayment(ctx: CompanyContext, raw: PaymentInput) {
         date: input.date,
       });
     }
-    return payment.id;
+    if (input.direction === "RECEIVED") await acceptShare(tx, ctx.companyId, input.receivedId, "PAYMENT", payment.id, ctx.user.id);
+    // A payment made to a company on MyGSTBook goes to its Received inbox.
+    const shareId = input.direction === "PAID" ? await syncPaymentShare(tx, ctx.companyId, payment.id) : null;
+    return { paymentId: payment.id, shareId };
   });
   await deliverSoon(ctx.companyId);
+  await notifyShareReceived(shareId);
   return paymentId;
 }
 
@@ -192,6 +199,9 @@ export async function deletePayment(ctx: CompanyContext, id: string) {
     if (!p) throw new UserError("Payment not found");
     await assertNotLocked(tx, ctx.companyId, p.date);
     await tx.payment.delete({ where: { id } }); // allocations cascade
+    if (p.direction === "PAID") await withdrawShare(tx, ctx.companyId, "PAYMENT", id);
+    // Deleting a payment confirmed from the Received inbox puts it back there to review.
+    else await tx.sharedDocument.updateMany({ where: { toCompanyId: ctx.companyId, kind: "PAYMENT", acceptedRefId: id }, data: { status: "NEW", acceptedRefId: null, actedAt: null, actedBy: null } });
     await tx.auditLog.create({
       data: { companyId: ctx.companyId, userId: ctx.user.id, action: "delete", entity: "payment", entityId: id, data: { amount: p.amount.toString() } },
     });

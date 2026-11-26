@@ -9,13 +9,13 @@ export async function ShareStatus({ companyId, kind, sourceId, className = "" }:
   const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
   const text =
     s.status === "ACCEPTED"
-      ? `added to their books on ${day(s.actedAt)}`
+      ? `${kind === "PAYMENT" ? "confirmed" : "added to their books"} on ${day(s.actedAt)}`
       : s.status === "REJECTED"
         ? `rejected on ${day(s.actedAt)}${s.rejectReason ? `: “${s.rejectReason}”` : ""}`
         : s.status === "WITHDRAWN"
           ? "withdrawn (cancelled here)"
           : s.readAt
-            ? `opened on ${day(s.readAt)}, not added yet`
+            ? `opened on ${day(s.readAt)}, not ${kind === "PAYMENT" ? "confirmed" : "added"} yet`
             : "delivered, not opened yet";
   return (
     <p className={`flex items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2.5 text-sm ${className}`} data-testid="share-status">

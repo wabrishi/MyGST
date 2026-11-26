@@ -61,7 +61,7 @@ export const CORE_SECTIONS: NavSectionDef[] = [
     items: [
       item("purchase-orders", "Purchase orders", ClipboardList, "purchaseOrders.view"),
       item("purchases", "Purchase invoices", ShoppingCart, "purchases.view"),
-      item("received", "Received", Inbox, ["purchases.view", "purchaseOrders.view", "docs.create"]),
+      item("received", "Received", Inbox, ["purchases.view", "purchaseOrders.view", "docs.create", "payments.view"]),
     ],
   },
   { key: "masters", title: "Masters", items: [item("parties", "Parties", Users), item("products", "Products", Package)] },

@@ -4,6 +4,7 @@ import { db, type Tx } from "./db";
 import { sendTemplate } from "./email-render";
 import { formatINR, toPaise } from "./gst/calc";
 import { findNetworkCompany } from "./network";
+import { MATCH_WINDOW_DAYS, rankMatches } from "./payment-match";
 import { BUILTIN_ROLE_ID } from "./permissions";
 
 /**
@@ -18,6 +19,7 @@ export const KIND_LABEL: Record<SharedKind, string> = {
   DEBIT_NOTE: "Debit note",
   QUOTATION: "Quotation",
   PURCHASE_ORDER: "Purchase order",
+  PAYMENT: "Payment",
 };
 
 export interface SharedLine {
@@ -53,6 +55,8 @@ export interface SharedSnapshot {
   /** Purchase orders: where and when to deliver. */
   deliveryAddress: string;
   paymentTerms: string;
+  /** Payments: how it was paid and which of the receiver's invoices it settles (by their number). */
+  payment?: { mode: string; reference: string; against: Array<{ number: string; amount: number }> };
 }
 
 const KIND_OF: Partial<Record<DocType, SharedKind>> = { INVOICE: "INVOICE", CREDIT_NOTE: "CREDIT_NOTE", DEBIT_NOTE: "DEBIT_NOTE", QUOTATION: "QUOTATION" };
@@ -189,6 +193,86 @@ export async function syncPurchaseOrderShare(tx: Tx, companyId: string, poId: st
   return upsertShare(tx, { fromCompanyId: companyId, kind: "PURCHASE_ORDER", sourceId: poId, toCompanyId: to.id, number: po.number, date: po.date, total: n(po.grandTotal), snapshot });
 }
 
+/** "18 Nov 2026" */
+const dayLabel = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** The label a shared payment goes by (payments have no number): its reference, or its date. */
+export const paymentLabel = (reference: string, date: Date) => (reference.trim() || `dated ${dayLabel(date)}`).slice(0, 30);
+
+/**
+ * After a payment MADE is saved: tell the supplier's company, if it's on MyGSTBook. It arrives in their
+ * Received inbox; once they confirm it, it becomes a payment received in their books.
+ */
+export async function syncPaymentShare(tx: Tx, companyId: string, paymentId: string): Promise<string | null> {
+  const p = await tx.payment.findFirst({
+    where: { id: paymentId, companyId },
+    include: { company: true, party: { select: { name: true, gstin: true } }, allocations: { include: { purchaseBill: { select: { billNumber: true } } } } },
+  });
+  if (!p || p.direction !== "PAID") return null;
+  const to = await findNetworkCompany(p.party.gstin, companyId, tx);
+  if (!to) return null;
+  const c = p.company;
+  const amount = n(p.amount);
+  const snapshot: SharedSnapshot = {
+    from: {
+      name: c.tradeName || c.legalName,
+      legalName: c.legalName,
+      gstin: c.gstin,
+      address: [c.address, c.city, c.pincode].filter(Boolean).join(", "),
+      stateCode: c.stateCode,
+      email: c.email,
+      phone: c.phone,
+    },
+    to: { name: p.party.name, gstin: p.party.gstin },
+    number: paymentLabel(p.reference, p.date),
+    date: iso(p.date),
+    dueDate: "",
+    expectedDate: "",
+    placeOfSupply: "",
+    isInterstate: false,
+    pricesIncludeTax: false,
+    items: [],
+    totals: { taxable: 0, cgst: 0, sgst: 0, igst: 0, roundOff: 0, grandTotal: amount },
+    notes: p.notes ?? "",
+    originalNumber: "",
+    reason: "",
+    deliveryAddress: "",
+    paymentTerms: "",
+    // The payer's purchase-invoice numbers are the receiver's own invoice numbers.
+    payment: { mode: p.mode, reference: p.reference, against: p.allocations.filter((a) => a.purchaseBill).map((a) => ({ number: a.purchaseBill!.billNumber, amount: n(a.amount) })) },
+  };
+  return upsertShare(tx, { fromCompanyId: companyId, kind: "PAYMENT", sourceId: p.id, toCompanyId: to.id, number: snapshot.number, date: p.date, total: amount, snapshot });
+}
+
+/**
+ * Our own payments received that a shared payment may already be recorded as (B entered it by hand
+ * before A told us). Unmatched, same customer, within the date window; same amount first.
+ */
+export async function matchCandidates(tx: Tx | typeof db, companyId: string, share: { id: string; date: Date; total: { toNumber(): number }; snapshot: SharedSnapshot }) {
+  const party = await tx.party.findFirst({ where: { companyId, gstin: share.snapshot.from.gstin }, orderBy: { createdAt: "asc" }, select: { id: true } });
+  if (!party) return [];
+  const day = 86_400_000;
+  const rows = await tx.payment.findMany({
+    where: {
+      companyId,
+      partyId: party.id,
+      direction: "RECEIVED",
+      date: { gte: new Date(share.date.getTime() - MATCH_WINDOW_DAYS * day), lte: new Date(share.date.getTime() + MATCH_WINDOW_DAYS * day) },
+    },
+    select: { id: true, date: true, amount: true, mode: true, reference: true },
+    take: 100,
+  });
+  const used = await tx.sharedDocument.findMany({
+    where: { toCompanyId: companyId, kind: "PAYMENT", id: { not: share.id }, acceptedRefId: { in: rows.map((r) => r.id) } },
+    select: { acceptedRefId: true },
+  });
+  return rankMatches(
+    rows.map((r) => ({ id: r.id, date: iso(r.date), amount: toPaise(n(r.amount)), mode: r.mode, reference: r.reference })),
+    { date: iso(share.date), amount: toPaise(share.total.toNumber()) },
+    new Set(used.map((u) => u.acceptedRefId!)),
+  );
+}
+
 /** Emails the receiving company's owners that a document arrived (never throws). */
 export async function notifyShareReceived(shareId: string | null) {
   if (!shareId) return;
@@ -216,6 +300,7 @@ export async function notifyShareReceived(shareId: string | null) {
         number: s.number,
         total: formatINR(toPaise(n(s.total))),
         url: `${base}/c/${s.toCompanyId}/received/${s.id}`,
+        attached: attachments.length ? "yes" : "",
       }, { attachments });
     }
   } catch (e) {
@@ -245,12 +330,13 @@ export const unreadReceivedCount = (companyId: string, kinds: SharedKind[]) =>
 // ───────────────────────── Receiver ─────────────────────────
 
 /** What each kind becomes in the receiver's books. */
-export const ACCEPT_AS: Record<SharedKind, "purchase" | "purchaseOrder" | "sale" | null> = {
+export const ACCEPT_AS: Record<SharedKind, "purchase" | "purchaseOrder" | "sale" | "paymentReceived" | null> = {
   INVOICE: "purchase",
   QUOTATION: "purchaseOrder",
   PURCHASE_ORDER: "sale",
   CREDIT_NOTE: null,
   DEBIT_NOTE: null,
+  PAYMENT: "paymentReceived",
 };
 
 /**

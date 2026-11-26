@@ -208,7 +208,7 @@ ${fallback("url")}`,
     key: "document_received",
     attachesPdf: true,
     label: "Document received from another business",
-    description: "Sent to a company when another company on MyGSTBook sends them an invoice, note, quotation or purchase order.",
+    description: "Sent to a company when another company on MyGSTBook sends them an invoice, note, quotation, purchase order or payment.",
     vars: {
       ...brandVar,
       companyName: { help: "Receiving company", sample: "Blue Ocean Pvt Ltd" },
@@ -217,6 +217,7 @@ ${fallback("url")}`,
       number: { help: "Document number", sample: "INV/26-27/0042" },
       total: { help: "Total amount", sample: "₹6,667.00" },
       url: { help: "Link to it in the Received inbox", sample: "https://example.com/c/…/received/…" },
+      attached: { help: "Not empty when the PDF is attached (payments have none)", sample: "yes" },
     },
     subject: "{{fromCompany}} sent you {{docType}} {{number}}",
     body: `<h1>You've received a document</h1>
@@ -228,7 +229,7 @@ ${fallback("url")}`,
 <tr class="total"><td>Amount</td><td>{{total}}</td></tr>
 </table>
 <a class="btn" href="{{url}}">Review document</a>
-<p class="muted">The PDF is attached. Nothing is added to your books until you review and accept it.</p>
+<p class="muted">{{#if attached}}The PDF is attached. {{/if}}Nothing is added to your books until you review and accept it.</p>
 ${fallback("url")}`,
   },
 ];

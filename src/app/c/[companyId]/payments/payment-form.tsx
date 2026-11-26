@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAction } from "@/components/form-utils";
 import { Alert, Button, Card, Field, Input, Select, Table, Td, Th, Textarea } from "@/components/ui";
@@ -27,7 +28,20 @@ export function PaymentForm({
   companyId: string;
   parties: Party[];
   today: string;
-  initial: { direction: "RECEIVED" | "PAID"; partyId: string; targetId?: string; items?: OpenItem[] };
+  initial: {
+    direction: "RECEIVED" | "PAID";
+    partyId: string;
+    targetId?: string;
+    items?: OpenItem[];
+    /** Prefill from a payment another company on MyGSTBook sent us (Received inbox). */
+    alloc?: Record<string, string>;
+    amount?: string;
+    date?: string;
+    mode?: string;
+    reference?: string;
+    notes?: string;
+    received?: { id: string; from: string; duplicate: { id: string; date: string; amount: number } | null };
+  };
   allowPaid: boolean;
 }) {
   const { execute, pending, error, fieldErrors: fe } = useAction(createPayment.bind(null, companyId));
@@ -35,10 +49,12 @@ export function PaymentForm({
   const [partyId, setPartyId] = useState(initial.partyId);
   const [items, setItems] = useState<OpenItem[]>(initial.items ?? []);
   const [alloc, setAlloc] = useState<Record<string, string>>(() => {
+    if (initial.alloc) return initial.alloc;
     const t = initial.items?.find((i) => i.id === initial.targetId);
     return t ? { [t.id]: (t.balance / 100).toFixed(2) } : {};
   });
   const [amount, setAmount] = useState(() => {
+    if (initial.amount) return initial.amount;
     const t = initial.items?.find((i) => i.id === initial.targetId);
     return t ? (t.balance / 100).toFixed(2) : "";
   });
@@ -92,6 +108,7 @@ export function PaymentForm({
           mode: String(f.get("mode")) as (typeof MODES)[number][0],
           reference: String(f.get("reference")),
           notes: String(f.get("notes")),
+          receivedId: initial.received?.id ?? "",
           allocations: Object.entries(alloc)
             .filter(([, v]) => Number(v) > 0)
             .map(([targetId, v]) => ({ targetId, amount: v })),
@@ -99,6 +116,22 @@ export function PaymentForm({
       }}
     >
       {error && <Alert>{error}</Alert>}
+      {initial.received && (
+        <Alert kind="info">
+          <b>{initial.received.from}</b> told you on MyGSTBook they made this payment. Check it against your bank or cash, then save to add it to your payments received.
+          {!initial.partyId && " Select the customer first."}
+        </Alert>
+      )}
+      {initial.received?.duplicate && (
+        <Alert kind="warning">
+          You already recorded {formatINR(initial.received.duplicate.amount)} from this customer on {initial.received.duplicate.date}. If that&apos;s this payment, don&apos;t save
+          a second one:{" "}
+          <Link href={`/c/${companyId}/received/${initial.received.id}`} className="font-semibold underline underline-offset-2">
+            match it in Received
+          </Link>{" "}
+          instead.
+        </Alert>
+      )}
       <Card className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="Type">
           <Select
@@ -125,13 +158,13 @@ export function PaymentForm({
           </Select>
         </Field>
         <Field label="Date" required error={fe.date}>
-          <Input type="date" name="date" defaultValue={today} required />
+          <Input type="date" name="date" defaultValue={initial.date || today} required />
         </Field>
         <Field label="Amount (₹)" required error={fe.amount}>
           <Input type="number" step="0.01" min="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
         </Field>
         <Field label="Mode">
-          <Select name="mode" defaultValue="BANK">
+          <Select name="mode" defaultValue={MODES.some(([v]) => v === initial.mode) ? initial.mode : "BANK"}>
             {MODES.map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
@@ -140,10 +173,10 @@ export function PaymentForm({
           </Select>
         </Field>
         <Field label="Reference" hint="UTR / cheque no. / transaction id">
-          <Input name="reference" maxLength={100} />
+          <Input name="reference" maxLength={100} defaultValue={initial.reference} />
         </Field>
         <Field label="Notes" className="sm:col-span-2 lg:col-span-3">
-          <Textarea name="notes" rows={2} maxLength={1000} />
+          <Textarea name="notes" rows={2} maxLength={1000} defaultValue={initial.notes} />
         </Field>
       </Card>
 
@@ -209,7 +242,7 @@ export function PaymentForm({
       </Card>
 
       <div>
-        <Button disabled={pending || advance < 0}>{pending ? "Saving…" : "Save payment"}</Button>
+        <Button disabled={pending || advance < 0}>{pending ? "Saving…" : initial.received ? "Confirm & save payment" : "Save payment"}</Button>
       </div>
     </form>
   );

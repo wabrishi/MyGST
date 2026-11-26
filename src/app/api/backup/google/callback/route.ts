@@ -5,6 +5,7 @@ import { decryptSecret, encryptSecret, verifyState } from "@/lib/backup/crypto";
 import { createFolder, exchangeCode, revoke } from "@/lib/backup/google-drive";
 import { folderName } from "@/lib/backup/runner";
 import { db } from "@/lib/db";
+import { publicUrl } from "@/lib/public-url";
 
 /** Google redirects here after consent. Stores the (encrypted) refresh token and creates the backup folder. */
 export async function GET(request: Request) {
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
   const s = state ? parseScope(state.scope, state.companyId || null) : null;
   if (!state || !s || !nonce || state.nonce !== nonce) return new Response("Invalid or expired request. Please try connecting again.", { status: 400 });
 
-  const back = new URL(returnPathOf(s), url);
+  const back = publicUrl(returnPathOf(s), request);
   const fail = (msg: string) => {
     back.searchParams.set("backup", "error");
     back.searchParams.set("msg", msg.slice(0, 200));
